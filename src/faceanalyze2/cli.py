@@ -7,6 +7,7 @@ import typer
 from pydantic import ValidationError
 from rich.console import Console
 
+from faceanalyze2.analysis.alignment import run_alignment
 from faceanalyze2.analysis.segmentation import SegmentParams, run_segmentation
 from faceanalyze2.config import RunConfig, TaskType
 from faceanalyze2.landmarks.mediapipe_face_landmarker import extract_face_landmarks_from_video
@@ -20,9 +21,11 @@ app = typer.Typer(
 video_app = typer.Typer(help="Video I/O utilities.")
 landmarks_app = typer.Typer(help="Landmark extraction utilities.")
 segment_app = typer.Typer(help="Signal segmentation utilities.")
+align_app = typer.Typer(help="Landmark alignment utilities.")
 app.add_typer(video_app, name="video")
 app.add_typer(landmarks_app, name="landmarks")
 app.add_typer(segment_app, name="segment")
+app.add_typer(align_app, name="align")
 console = Console()
 
 
@@ -307,6 +310,69 @@ def segment_run(
     console.print(f"Saved signals CSV to {result['signals_csv_path']}")
     console.print(f"Saved segment JSON to {result['segment_json_path']}")
     console.print(f"Saved signal plot to {result['plot_path']}")
+
+
+@align_app.command("run")
+def align_run(
+    video: Path = typer.Option(
+        ...,
+        "--video",
+        "-v",
+        help="Input video path used for artifact lookup.",
+    ),
+    landmarks: Path | None = typer.Option(
+        None,
+        "--landmarks",
+        help="Optional landmarks.npz path. Defaults to artifacts/<video_stem>/landmarks.npz.",
+    ),
+    segment: Path | None = typer.Option(
+        None,
+        "--segment",
+        help="Optional segment.json path. Defaults to artifacts/<video_stem>/segment.json.",
+    ),
+    artifact_root: Path = typer.Option(
+        Path("artifacts"),
+        "--artifact-root",
+        help="Root directory for artifact outputs.",
+    ),
+    scale_z: bool = typer.Option(
+        False,
+        "--scale-z/--keep-z",
+        help="Scale z with similarity scale. Default keeps original z values.",
+    ),
+    scale_outlier_factor: float = typer.Option(
+        3.0,
+        "--scale-outlier-factor",
+        min=1.01,
+        help="Flag frames with scale > (median_scale * factor).",
+    ),
+) -> None:
+    try:
+        result = run_alignment(
+            video_path=video,
+            landmarks_path=landmarks,
+            segment_path=segment,
+            artifact_root=artifact_root,
+            scale_z=scale_z,
+            scale_outlier_factor=scale_outlier_factor,
+        )
+    except FileNotFoundError as exc:
+        message = str(exc)
+        if "Landmarks file not found" in message:
+            raise typer.BadParameter(message, param_hint="--landmarks") from exc
+        if "Segment file not found" in message:
+            raise typer.BadParameter(message, param_hint="--segment") from exc
+        raise typer.BadParameter(message, param_hint="--video") from exc
+    except ValueError as exc:
+        message = str(exc)
+        if "scale_outlier_factor" in message:
+            raise typer.BadParameter(message, param_hint="--scale-outlier-factor") from exc
+        raise typer.BadParameter(message, param_hint="--video") from exc
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--video") from exc
+
+    console.print(f"Saved aligned landmarks to {result['aligned_npz_path']}")
+    console.print(f"Saved alignment metadata to {result['alignment_json_path']}")
 
 
 def run() -> None:
