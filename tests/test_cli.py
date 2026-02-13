@@ -40,3 +40,20 @@ def test_cli_creates_output_dir(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert output_dir.exists()
     assert '"task": "brow"' in result.output
+
+
+def test_segment_command_guides_when_landmarks_are_missing(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "segment",
+            "run",
+            "--video",
+            str(tmp_path / "sample.mp4"),
+            "--task",
+            "smile",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "Landmarks file not found" in result.output
+    assert "faceanalyze2 landmarks extract --video" in result.output
