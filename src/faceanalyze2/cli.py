@@ -9,6 +9,7 @@ from rich.console import Console
 
 from faceanalyze2.analysis.alignment import run_alignment
 from faceanalyze2.analysis.alignment_viz import run_alignment_visualization
+from faceanalyze2.analysis.metrics import run_metrics
 from faceanalyze2.analysis.segmentation import SegmentParams, run_segmentation
 from faceanalyze2.config import RunConfig, TaskType
 from faceanalyze2.landmarks.mediapipe_face_landmarker import extract_face_landmarks_from_video
@@ -23,10 +24,12 @@ video_app = typer.Typer(help="Video I/O utilities.")
 landmarks_app = typer.Typer(help="Landmark extraction utilities.")
 segment_app = typer.Typer(help="Signal segmentation utilities.")
 align_app = typer.Typer(help="Landmark alignment utilities.")
+metrics_app = typer.Typer(help="ROI metrics and plots utilities.")
 app.add_typer(video_app, name="video")
 app.add_typer(landmarks_app, name="landmarks")
 app.add_typer(segment_app, name="segment")
 app.add_typer(align_app, name="align")
+app.add_typer(metrics_app, name="metrics")
 console = Console()
 
 
@@ -458,6 +461,79 @@ def align_viz(
     console.print(f"Saved alignment check plot to {result['alignment_check_path']}")
     console.print(f"Saved trajectory plot to {result['trajectory_plot_path']}")
     console.print(f"Saved alignment overlay video to {result['overlay_path']}")
+
+
+@metrics_app.command("run")
+def metrics_run(
+    video: Path = typer.Option(
+        ...,
+        "--video",
+        "-v",
+        help="Input video path used for artifact lookup.",
+    ),
+    task: TaskType = typer.Option(
+        ...,
+        "--task",
+        "-t",
+        help="Target movement task: smile, brow, eyeclose.",
+    ),
+    aligned: Path | None = typer.Option(
+        None,
+        "--aligned",
+        help="Optional landmarks_aligned.npz path. Defaults to artifacts/<video_stem>/landmarks_aligned.npz.",
+    ),
+    segment: Path | None = typer.Option(
+        None,
+        "--segment",
+        help="Optional segment.json path. Defaults to artifacts/<video_stem>/segment.json.",
+    ),
+    artifact_root: Path = typer.Option(
+        Path("artifacts"),
+        "--artifact-root",
+        help="Root directory for artifact outputs.",
+    ),
+    rois: str = typer.Option(
+        "all",
+        "--rois",
+        help="ROI selection: all or comma-separated values (mouth,eye,brow).",
+    ),
+    normalize: bool = typer.Option(
+        True,
+        "--normalize/--no-normalize",
+        help="Normalize displacement by neutral interocular distance.",
+    ),
+) -> None:
+    try:
+        result = run_metrics(
+            video_path=video,
+            task=task.value,
+            artifact_root=artifact_root,
+            aligned_path=aligned,
+            segment_path=segment,
+            rois=rois,
+            normalize=normalize,
+        )
+    except FileNotFoundError as exc:
+        message = str(exc)
+        if "Aligned landmarks file not found" in message:
+            raise typer.BadParameter(message, param_hint="--aligned") from exc
+        if "Segment file not found" in message:
+            raise typer.BadParameter(message, param_hint="--segment") from exc
+        raise typer.BadParameter(message, param_hint="--video") from exc
+    except ValueError as exc:
+        message = str(exc)
+        if "roi" in message or "rois" in message:
+            raise typer.BadParameter(message, param_hint="--rois") from exc
+        if "normalize" in message or "interocular" in message:
+            raise typer.BadParameter(message, param_hint="--normalize") from exc
+        raise typer.BadParameter(message, param_hint="--video") from exc
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--video") from exc
+
+    console.print(f"Saved plots to {result['plots_dir']}")
+    console.print(f"Saved timeseries CSV to {result['timeseries_csv_path']}")
+    console.print(f"Saved metrics CSV to {result['metrics_csv_path']}")
+    console.print(f"Saved metrics JSON to {result['metrics_json_path']}")
 
 
 def run() -> None:

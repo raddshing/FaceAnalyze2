@@ -69,6 +69,21 @@ Outputs are stored in `artifacts/<video_stem>/`:
 - default `--keep-z`: keeps original z values
 - `--scale-z`: applies per-frame similarity scale to z
 
+## M5 metrics and ROI plots usage
+
+```bash
+faceanalyze2 metrics run --video path/to/video.mp4 --task smile
+faceanalyze2 metrics run --video path/to/video.mp4 --task eyeclose --rois eye,mouth --no-normalize
+```
+
+Outputs are stored in `artifacts/<video_stem>/`:
+- `plots/mouth.png`, `plots/eye.png`, `plots/brow.png` (for selected rois)
+- `timeseries.csv`
+- `metrics.csv`
+- `metrics.json`
+
+M5 reads aligned coordinates from `landmarks_aligned.npz` key `landmarks_xy_aligned` (pixel coordinates).
+
 ## Notes
 
 - M0 CLI is a stub and does not run MediaPipe.
@@ -76,4 +91,5 @@ Outputs are stored in `artifacts/<video_stem>/`:
 - M2 adds MediaPipe Face Landmarker VIDEO-mode extraction into `artifacts/<video_stem>/`.
 - M3 adds robust baseline/peak segmentation from task-specific landmark signals.
 - M4 adds neutral-referenced similarity alignment (translation/rotation/scale) using eye landmarks.
+- M5 adds ROI left/right displacement metrics and asymmetry plots from aligned landmarks.
 - Keep patient/sensitive files out of git.
