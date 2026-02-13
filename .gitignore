@@ -26,9 +26,11 @@ coverage.xml
 *.png
 *.jpg
 *.jpeg
+*.task
 data/
 outputs/
 models/
+artifacts/
 
 # OS / editor
 .DS_Store
