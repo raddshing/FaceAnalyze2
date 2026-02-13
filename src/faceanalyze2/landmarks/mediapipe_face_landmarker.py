@@ -180,6 +180,7 @@ def extract_face_landmarks_from_video(
     output_blendshapes: bool = False,
     output_transforms: bool = False,
     use_gpu_delegate: bool = False,
+    artifact_root: str | Path = DEFAULT_ARTIFACT_ROOT,
 ) -> dict[str, Any]:
     if stride < 1:
         raise ValueError(f"stride must be >= 1, got: {stride}")
@@ -297,6 +298,7 @@ def extract_face_landmarks_from_video(
         presence=presence,
         blendshapes=blendshapes,
         transforms=transforms,
+        artifact_root=artifact_root,
         extract_time=started_at,
         elapsed_seconds=elapsed_seconds,
     )

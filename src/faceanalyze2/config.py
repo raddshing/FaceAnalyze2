@@ -1,7 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -42,3 +43,46 @@ class RunConfig(BaseModel):
             "task": self.task.value,
             "output_dir": str(self.output_dir),
         }
+
+
+def artifact_dir_for_video(
+    video_path: str | Path,
+    artifact_root: str | Path = Path("artifacts"),
+) -> Path:
+    return Path(artifact_root) / Path(video_path).stem
+
+
+def artifact_paths_for_video(
+    video_path: str | Path,
+    artifact_root: str | Path = Path("artifacts"),
+) -> dict[str, Path]:
+    artifact_dir = artifact_dir_for_video(video_path=video_path, artifact_root=artifact_root)
+    return {
+        "artifact_dir": artifact_dir,
+        "landmarks_npz": artifact_dir / "landmarks.npz",
+        "meta_json": artifact_dir / "meta.json",
+        "segment_json": artifact_dir / "segment.json",
+        "signals_csv": artifact_dir / "signals.csv",
+        "signals_plot_png": artifact_dir / "signals_plot.png",
+        "aligned_npz": artifact_dir / "landmarks_aligned.npz",
+        "alignment_json": artifact_dir / "alignment.json",
+        "alignment_check_png": artifact_dir / "alignment_check.png",
+        "trajectory_plot_png": artifact_dir / "trajectory_plot.png",
+        "alignment_overlay_mp4": artifact_dir / "alignment_overlay.mp4",
+        "alignment_overlay_avi": artifact_dir / "alignment_overlay.avi",
+        "plots_dir": artifact_dir / "plots",
+        "metrics_csv": artifact_dir / "metrics.csv",
+        "metrics_json": artifact_dir / "metrics.json",
+        "timeseries_csv": artifact_dir / "timeseries.csv",
+    }
+
+
+def normalize_task_value(task: Any) -> str:
+    if isinstance(task, TaskType):
+        return task.value
+    value = str(task.value) if hasattr(task, "value") else str(task)
+    valid_values = {member.value for member in TaskType}
+    if value not in valid_values:
+        valid = ", ".join(member.value for member in TaskType)
+        raise ValueError(f"Unsupported task '{value}'. Expected one of: {valid}")
+    return value
