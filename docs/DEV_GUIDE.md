@@ -49,10 +49,31 @@ Outputs are stored in `artifacts/<video_stem>/`:
 - `segment.json`
 - `signals_plot.png`
 
+## M4 alignment usage
+
+```bash
+faceanalyze2 align run --video path/to/video.mp4
+faceanalyze2 align run --video path/to/video.mp4 --landmarks artifacts/video/landmarks.npz --segment artifacts/video/segment.json
+faceanalyze2 align run --video path/to/video.mp4 --scale-z
+faceanalyze2 align viz --video path/to/video.mp4 --max-frames 300 --stride 2 --n-samples 15
+```
+
+Outputs are stored in `artifacts/<video_stem>/`:
+- `landmarks_aligned.npz` (`landmarks_xy_aligned` is stored in pixel coordinates)
+- `alignment.json`
+- `alignment_check.png`
+- `trajectory_plot.png`
+- `alignment_overlay.mp4` (or `alignment_overlay.avi` fallback)
+
+`z` handling:
+- default `--keep-z`: keeps original z values
+- `--scale-z`: applies per-frame similarity scale to z
+
 ## Notes
 
 - M0 CLI is a stub and does not run MediaPipe.
 - M1 adds OpenCV-based video metadata probing and frame export commands.
 - M2 adds MediaPipe Face Landmarker VIDEO-mode extraction into `artifacts/<video_stem>/`.
 - M3 adds robust baseline/peak segmentation from task-specific landmark signals.
+- M4 adds neutral-referenced similarity alignment (translation/rotation/scale) using eye landmarks.
 - Keep patient/sensitive files out of git.
