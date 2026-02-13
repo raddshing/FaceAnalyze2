@@ -126,3 +126,22 @@ def test_align_viz_command_guides_when_aligned_landmarks_are_missing(tmp_path: P
     assert result.exit_code != 0
     assert "Aligned landmarks file not found" in result.output
     assert "faceanalyze2 align run --video" in result.output
+
+
+def test_metrics_command_guides_when_aligned_landmarks_are_missing(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "metrics",
+            "run",
+            "--video",
+            str(tmp_path / "sample.mp4"),
+            "--task",
+            "smile",
+            "--artifact-root",
+            str(tmp_path / "artifacts"),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "Aligned landmarks file not found" in result.output
+    assert "faceanalyze2 align run --video" in result.output
