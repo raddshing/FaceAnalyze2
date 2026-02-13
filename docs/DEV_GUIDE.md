@@ -16,6 +16,30 @@ pytest
 ruff check .
 ```
 
+## Quickstart (새 동영상)
+
+가장 추천:
+
+```bash
+faceanalyze2 run --video "D:\\local\\sample.mp4" --task smile
+```
+
+상태 확인:
+
+```bash
+faceanalyze2 status --video "D:\\local\\sample.mp4"
+```
+
+수동 실행 순서:
+
+```bash
+faceanalyze2 landmarks extract --video "D:\\local\\sample.mp4"
+faceanalyze2 segment run --video "D:\\local\\sample.mp4" --task smile
+faceanalyze2 align run --video "D:\\local\\sample.mp4"
+faceanalyze2 metrics run --video "D:\\local\\sample.mp4" --task smile
+faceanalyze2 align viz --video "D:\\local\\sample.mp4"
+```
+
 ## M1 video I/O usage
 
 ```bash
