@@ -16,7 +16,8 @@ dependencies = [
   "rich>=13.7.1",
   "pydantic>=2.7.0",
   "numpy>=1.26.0",
-  "opencv-python>=4.10.0"
+  "opencv-python>=4.10.0",
+  "mediapipe>=0.10.14"
 ]
 
 [project.optional-dependencies]
