@@ -37,9 +37,22 @@ New-Item -ItemType Directory -Force -Path "models" | Out-Null
 Invoke-WebRequest -Uri "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" -OutFile "models/face_landmarker.task"
 ```
 
+## M3 segmentation usage
+
+```bash
+faceanalyze2 segment run --video path/to/video.mp4 --task smile
+faceanalyze2 segment run --video path/to/video.mp4 --task brow --landmarks artifacts/video/landmarks.npz
+```
+
+Outputs are stored in `artifacts/<video_stem>/`:
+- `signals.csv`
+- `segment.json`
+- `signals_plot.png`
+
 ## Notes
 
 - M0 CLI is a stub and does not run MediaPipe.
 - M1 adds OpenCV-based video metadata probing and frame export commands.
 - M2 adds MediaPipe Face Landmarker VIDEO-mode extraction into `artifacts/<video_stem>/`.
+- M3 adds robust baseline/peak segmentation from task-specific landmark signals.
 - Keep patient/sensitive files out of git.

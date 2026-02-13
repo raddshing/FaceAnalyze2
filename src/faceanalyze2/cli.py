@@ -7,6 +7,7 @@ import typer
 from pydantic import ValidationError
 from rich.console import Console
 
+from faceanalyze2.analysis.segmentation import SegmentParams, run_segmentation
 from faceanalyze2.config import RunConfig, TaskType
 from faceanalyze2.landmarks.mediapipe_face_landmarker import extract_face_landmarks_from_video
 from faceanalyze2.io.video_reader import probe_video, save_frame_png
@@ -18,8 +19,10 @@ app = typer.Typer(
 )
 video_app = typer.Typer(help="Video I/O utilities.")
 landmarks_app = typer.Typer(help="Landmark extraction utilities.")
+segment_app = typer.Typer(help="Signal segmentation utilities.")
 app.add_typer(video_app, name="video")
 app.add_typer(landmarks_app, name="landmarks")
+app.add_typer(segment_app, name="segment")
 console = Console()
 
 
@@ -217,6 +220,93 @@ def landmarks_extract(
 
     console.print(f"Saved landmarks to {result['npz_path']}")
     console.print(f"Saved metadata to {result['meta_path']}")
+
+
+@segment_app.command("run")
+def segment_run(
+    video: Path = typer.Option(
+        ...,
+        "--video",
+        "-v",
+        help="Input video path used for artifact lookup.",
+    ),
+    task: TaskType = typer.Option(
+        ...,
+        "--task",
+        "-t",
+        help="Target movement task: smile, brow, eyeclose.",
+    ),
+    landmarks: Path | None = typer.Option(
+        None,
+        "--landmarks",
+        help="Optional landmarks.npz path. Defaults to artifacts/<video_stem>/landmarks.npz.",
+    ),
+    artifact_root: Path = typer.Option(
+        Path("artifacts"),
+        "--artifact-root",
+        help="Root directory for artifact outputs.",
+    ),
+    median_window: int = typer.Option(
+        5,
+        "--median-window",
+        min=1,
+        help="Median filter window for signal smoothing.",
+    ),
+    moving_average_window: int = typer.Option(
+        9,
+        "--moving-average-window",
+        min=1,
+        help="Moving average window for signal smoothing.",
+    ),
+    pre_seconds: float = typer.Option(
+        2.0,
+        "--pre-seconds",
+        min=0.1,
+        help="Seconds before initial peak to prioritize neutral search.",
+    ),
+    onset_alpha: float = typer.Option(
+        0.2,
+        "--onset-alpha",
+        min=0.01,
+        max=0.95,
+        help="Onset threshold ratio relative to amplitude.",
+    ),
+    offset_alpha: float = typer.Option(
+        0.2,
+        "--offset-alpha",
+        min=0.01,
+        max=0.95,
+        help="Offset threshold ratio relative to amplitude.",
+    ),
+) -> None:
+    params = SegmentParams(
+        median_window=median_window,
+        moving_average_window=moving_average_window,
+        pre_seconds=pre_seconds,
+        onset_alpha=onset_alpha,
+        offset_alpha=offset_alpha,
+    )
+    try:
+        result = run_segmentation(
+            video_path=video,
+            task=task.value,
+            landmarks_path=landmarks,
+            artifact_root=artifact_root,
+            params=params,
+        )
+    except FileNotFoundError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--landmarks") from exc
+    except ValueError as exc:
+        message = str(exc)
+        if "task" in message:
+            raise typer.BadParameter(message, param_hint="--task") from exc
+        raise typer.BadParameter(message, param_hint="--video") from exc
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--video") from exc
+
+    console.print(f"Saved signals CSV to {result['signals_csv_path']}")
+    console.print(f"Saved segment JSON to {result['segment_json_path']}")
+    console.print(f"Saved signal plot to {result['plot_path']}")
 
 
 def run() -> None:
