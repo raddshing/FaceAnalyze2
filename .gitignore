@@ -31,6 +31,8 @@ data/
 outputs/
 models/
 artifacts/
+demo_inputs/
+demo_outputs/
 
 # OS / editor
 .DS_Store
