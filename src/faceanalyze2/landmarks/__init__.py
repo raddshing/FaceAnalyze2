@@ -1,1 +1,1 @@
-﻿"""Landmark provider interfaces."""
+"""Landmark provider interfaces."""

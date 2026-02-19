@@ -30,7 +30,9 @@ def test_estimate_similarity_transform_recovers_known_transform() -> None:
     true_translation = np.asarray([14.0, -6.0], dtype=np.float32)
     dst = (true_scale * (true_rotation @ src.T)).T + true_translation
 
-    estimated_scale, estimated_rotation, estimated_translation = estimate_similarity_transform(src, dst)
+    estimated_scale, estimated_rotation, estimated_translation = estimate_similarity_transform(
+        src, dst
+    )
     recovered = (estimated_scale * (estimated_rotation @ src.T)).T + estimated_translation
 
     assert np.isclose(estimated_scale, true_scale, rtol=1e-5, atol=1e-5)
@@ -64,7 +66,9 @@ def test_run_alignment_handles_presence_false_and_nan(tmp_path: Path) -> None:
         landmarks_xyz[0, idx] = np.asarray([x, y, z], dtype=np.float32)
 
     theta = np.deg2rad(8.0)
-    rotation = np.asarray([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]], dtype=np.float32)
+    rotation = np.asarray(
+        [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]], dtype=np.float32
+    )
     scale = 1.15
     translation = np.asarray([11.0, -7.0], dtype=np.float32)
 

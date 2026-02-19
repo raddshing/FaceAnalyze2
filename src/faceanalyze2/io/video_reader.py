@@ -35,7 +35,9 @@ def _normalize_path(path: str | Path) -> Path:
         raise ValueError(f"Video path is not a file: {video_path}")
     if video_path.suffix.lower() not in SUPPORTED_VIDEO_EXTENSIONS:
         supported = ", ".join(sorted(SUPPORTED_VIDEO_EXTENSIONS))
-        raise ValueError(f"Unsupported video extension '{video_path.suffix}'. Supported: {supported}")
+        raise ValueError(
+            f"Unsupported video extension '{video_path.suffix}'. Supported: {supported}"
+        )
     return video_path
 
 
@@ -121,7 +123,9 @@ def iter_frames(
 def extract_frame(path: str | Path, frame_idx: int, *, to_rgb: bool = True) -> Frame:
     if frame_idx < 0:
         raise ValueError(f"frame_idx must be >= 0, got: {frame_idx}")
-    iterator = iter_frames(path, stride=1, start_frame=frame_idx, end_frame=frame_idx + 1, to_rgb=to_rgb)
+    iterator = iter_frames(
+        path, stride=1, start_frame=frame_idx, end_frame=frame_idx + 1, to_rgb=to_rgb
+    )
     try:
         return next(iterator)
     except StopIteration as exc:
