@@ -51,7 +51,7 @@ python -m faceanalyze2 run --video "D:\local\sample.mp4" --task smile --model "m
 python -m faceanalyze2 viewer generate --video "D:\local\sample.mp4"
 ```
 
-### ③ dynamicAnalysis 연동 예제
+### ③ Python API 호출 예제 (dynamicAnalysis 연동 예제)
 ```python
 from faceanalyze2 import dynamicAnalysis
 
@@ -68,11 +68,20 @@ python -m faceanalyze2.demo.gradio_app
 ## 5) Artifacts 구조
 주요 산출물은 `artifacts/<video_stem>/` 아래에 생성됩니다.
 
-- `landmarks.npz`, `meta.json`
-- `segment.json`, `signals.csv`, `signals_plot.png`
-- `landmarks_aligned.npz`, `alignment.json`
-- `metrics.json`, `metrics.csv`, `timeseries.csv`, `plots/*.png`
-- `motion_viewer.html`
+| 단계 | 산출물 | 설명 |
+|---|---|---|
+| landmarks | `landmarks.npz` | 478개 얼굴 랜드마크 좌표 (T×478×3) |
+| landmarks | `meta.json` | 영상 메타데이터 (fps, width, height 등) |
+| segment | `segment.json` | neutral/peak/onset/offset 프레임 인덱스 |
+| segment | `signals.csv` | 프레임별 task 신호 (raw + smoothed) |
+| segment | `signals_plot.png` | 신호 시각화 및 구간 표시 그래프 |
+| align | `landmarks_aligned.npz` | neutral 기준 정합된 랜드마크 좌표 (pixel) |
+| align | `alignment.json` | 정합 파라미터 및 품질 통계 |
+| metrics | `metrics.json` | ROI별 좌/우 변위, 비대칭 지수(AI), score |
+| metrics | `metrics.csv` | metrics 요약 (CSV 형식) |
+| metrics | `timeseries.csv` | 프레임별 ROI 좌/우 변위 시계열 |
+| metrics | `plots/*.png` | ROI별 좌/우 displacement 그래프 |
+| viewer | `motion_viewer.html` | 3D/2D 인터랙티브 모션 뷰어 |
 
 ## 6) Frontend Integration
 핵심 계약은 `dynamicAnalysis(vd_path, motion)`입니다.
