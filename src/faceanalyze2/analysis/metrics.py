@@ -307,10 +307,17 @@ def compute_roi_displacements(
         right_peak = float(right["mean_disp"][-1]) if right["mean_disp"].size else float("nan")
         if np.isfinite(left_peak) and np.isfinite(right_peak):
             mean_lr = 0.5 * (left_peak + right_peak)
-            ai = abs(left_peak - right_peak) / (mean_lr + EPSILON)
+            ai = abs(left_peak - right_peak) / max(EPSILON, mean_lr)
+            score = (1.0 - min(1.0, max(0.0, ai))) * 100.0
         else:
             ai = float("nan")
-        metrics[roi_name] = {"L_peak": left_peak, "R_peak": right_peak, "AI": float(ai)}
+            score = float("nan")
+        metrics[roi_name] = {
+            "L_peak": left_peak,
+            "R_peak": right_peak,
+            "AI": float(ai),
+            "score": float(score),
+        }
 
     return {
         "row_indices": row_indices,
@@ -411,6 +418,7 @@ def _save_metrics_csv(
         "L_peak",
         "R_peak",
         "AI",
+        "score",
         "neutral_frame_idx",
         "peak_frame_idx",
         "neutral_idx",
@@ -434,6 +442,7 @@ def _save_metrics_csv(
                     "L_peak": metric["L_peak"],
                     "R_peak": metric["R_peak"],
                     "AI": metric["AI"],
+                    "score": metric["score"],
                     "neutral_frame_idx": neutral_frame_idx,
                     "peak_frame_idx": peak_frame_idx,
                     "neutral_idx": int(result["neutral_idx"]),
