@@ -1,1 +1,1 @@
-﻿"""Metric calculation interfaces."""
+"""Metric calculation interfaces."""

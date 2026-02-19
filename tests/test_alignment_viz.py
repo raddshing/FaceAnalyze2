@@ -42,11 +42,15 @@ def _make_dummy_video(tmp_path: Path) -> tuple[Path, float, int, int, int]:
     height = 72
     frame_count = 12
     mp4_path = tmp_path / "sample.mp4"
-    if _write_dummy_video(mp4_path, codec="mp4v", fps=fps, width=width, height=height, frame_count=frame_count):
+    if _write_dummy_video(
+        mp4_path, codec="mp4v", fps=fps, width=width, height=height, frame_count=frame_count
+    ):
         return mp4_path, fps, width, height, frame_count
 
     avi_path = tmp_path / "sample.avi"
-    if _write_dummy_video(avi_path, codec="MJPG", fps=fps, width=width, height=height, frame_count=frame_count):
+    if _write_dummy_video(
+        avi_path, codec="MJPG", fps=fps, width=width, height=height, frame_count=frame_count
+    ):
         return avi_path, fps, width, height, frame_count
 
     pytest.skip("No available OpenCV writer codec for test video generation")

@@ -86,9 +86,13 @@ def _load_segment(artifact_dir: Path, frame_count: int) -> dict[str, int]:
     neutral_idx = int(payload["neutral_idx"])
     peak_idx = int(payload["peak_idx"])
     if neutral_idx < 0 or neutral_idx >= frame_count:
-        raise ValueError(f"segment.json neutral_idx out of range: {neutral_idx} (frame_count={frame_count})")
+        raise ValueError(
+            f"segment.json neutral_idx out of range: {neutral_idx} (frame_count={frame_count})"
+        )
     if peak_idx < 0 or peak_idx >= frame_count:
-        raise ValueError(f"segment.json peak_idx out of range: {peak_idx} (frame_count={frame_count})")
+        raise ValueError(
+            f"segment.json peak_idx out of range: {peak_idx} (frame_count={frame_count})"
+        )
     return {"neutral_idx": neutral_idx, "peak_idx": peak_idx}
 
 
@@ -282,7 +286,9 @@ def _series_max(values: np.ndarray) -> float:
     return float(np.max(finite))
 
 
-def _compute_roi_metrics_from_series(result: dict[str, Any], roi_names: list[str]) -> dict[str, dict[str, float]]:
+def _compute_roi_metrics_from_series(
+    result: dict[str, Any], roi_names: list[str]
+) -> dict[str, dict[str, float]]:
     metrics: dict[str, dict[str, float]] = {}
     for roi_name in roi_names:
         series = result["series"][roi_name]
@@ -403,7 +409,9 @@ def dynamicAnalysis(vd_path: str | Path, motion: str) -> dict[str, Any]:
 
     raw_xy = _load_raw_xy_for_overlay(artifact_dir=artifact_dir, width=width, height=height)
     if raw_xy is None:
-        before_regi = _placeholder_png_base64("raw landmarks unavailable", width=width, height=height)
+        before_regi = _placeholder_png_base64(
+            "raw landmarks unavailable", width=width, height=height
+        )
     else:
         before_regi = _overlay_landmarks_png(
             raw_xy[neutral_idx],

@@ -29,7 +29,9 @@ coverage.xml
 *.task
 data/
 outputs/
-models/
+# Keep models directory structure but ignore all runtime payloads by default.
+models/*
+!models/README.md
 artifacts/
 demo_inputs/
 demo_outputs/

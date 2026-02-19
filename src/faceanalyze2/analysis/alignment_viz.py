@@ -10,7 +10,14 @@ import numpy as np
 from faceanalyze2.analysis.alignment import STABLE_IDXS
 from faceanalyze2.analysis.segmentation import DEFAULT_ARTIFACT_ROOT, load_landmark_artifacts
 from faceanalyze2.io.video_reader import iter_frames
-from faceanalyze2.roi.indices import INNER_LIP, LEFT_BROW, LEFT_EYE, MOUTH_CORNERS, RIGHT_BROW, RIGHT_EYE
+from faceanalyze2.roi.indices import (
+    INNER_LIP,
+    LEFT_BROW,
+    LEFT_EYE,
+    MOUTH_CORNERS,
+    RIGHT_BROW,
+    RIGHT_EYE,
+)
 
 REQUIRED_ALIGNED_KEYS = {
     "frame_indices",
@@ -22,7 +29,15 @@ REQUIRED_ALIGNED_KEYS = {
     "transform_t",
 }
 OVERLAY_POINT_INDICES = sorted(
-    set(STABLE_IDXS + [MOUTH_CORNERS[0], MOUTH_CORNERS[1]] + LEFT_EYE + RIGHT_EYE + LEFT_BROW + RIGHT_BROW + INNER_LIP)
+    set(
+        STABLE_IDXS
+        + [MOUTH_CORNERS[0], MOUTH_CORNERS[1]]
+        + LEFT_EYE
+        + RIGHT_EYE
+        + LEFT_BROW
+        + RIGHT_BROW
+        + INNER_LIP
+    )
 )
 
 
@@ -47,7 +62,7 @@ def _missing_landmarks_message(path: Path, video_path: str | Path) -> str:
     return (
         f"Landmarks file not found: {path}\n"
         "Run this first: landmarks extract.\n"
-        f"faceanalyze2 landmarks extract --video \"{video_path}\""
+        f'faceanalyze2 landmarks extract --video "{video_path}"'
     )
 
 
@@ -55,7 +70,7 @@ def _missing_segment_message(path: Path, video_path: str | Path) -> str:
     return (
         f"Segment file not found: {path}\n"
         "Run this first: segment run.\n"
-        f"faceanalyze2 segment run --video \"{video_path}\" --task <smile|brow|eyeclose>"
+        f'faceanalyze2 segment run --video "{video_path}" --task <smile|brow|eyeclose>'
     )
 
 
@@ -63,7 +78,7 @@ def _missing_aligned_message(path: Path, video_path: str | Path) -> str:
     return (
         f"Aligned landmarks file not found: {path}\n"
         "Run this first: align run.\n"
-        f"faceanalyze2 align run --video \"{video_path}\""
+        f'faceanalyze2 align run --video "{video_path}"'
     )
 
 
@@ -83,7 +98,9 @@ def _load_segment_neutral_idx(segment_path: Path, frame_count: int) -> int:
         raise ValueError(f"segment.json is missing required field 'neutral_idx': {segment_path}")
     neutral_idx = int(payload["neutral_idx"])
     if neutral_idx < 0 or neutral_idx >= frame_count:
-        raise ValueError(f"segment.json neutral_idx out of range: {neutral_idx} (frame_count={frame_count})")
+        raise ValueError(
+            f"segment.json neutral_idx out of range: {neutral_idx} (frame_count={frame_count})"
+        )
     return neutral_idx
 
 
@@ -112,14 +129,24 @@ def _validate_alignment_compatibility(
     if aligned_timestamps_ms.shape != raw_timestamps_ms.shape:
         raise ValueError("landmarks_aligned timestamps_ms shape mismatch with landmarks")
     if landmarks_xy_aligned.ndim != 3 or landmarks_xy_aligned.shape[1:] != (478, 2):
-        raise ValueError(f"landmarks_xy_aligned must have shape (T, 478, 2), got {landmarks_xy_aligned.shape}")
+        raise ValueError(
+            f"landmarks_xy_aligned must have shape (T, 478, 2), got {landmarks_xy_aligned.shape}"
+        )
     if landmarks_xy_aligned.shape[0] != raw_frame_indices.shape[0]:
         raise ValueError("landmarks_xy_aligned frame count mismatch with landmarks")
 
-    if not np.array_equal(aligned_frame_indices.astype(np.int64), raw_frame_indices.astype(np.int64)):
-        raise ValueError("landmarks_aligned frame_indices values do not match landmarks frame_indices")
-    if not np.array_equal(aligned_timestamps_ms.astype(np.int64), raw_timestamps_ms.astype(np.int64)):
-        raise ValueError("landmarks_aligned timestamps_ms values do not match landmarks timestamps_ms")
+    if not np.array_equal(
+        aligned_frame_indices.astype(np.int64), raw_frame_indices.astype(np.int64)
+    ):
+        raise ValueError(
+            "landmarks_aligned frame_indices values do not match landmarks frame_indices"
+        )
+    if not np.array_equal(
+        aligned_timestamps_ms.astype(np.int64), raw_timestamps_ms.astype(np.int64)
+    ):
+        raise ValueError(
+            "landmarks_aligned timestamps_ms values do not match landmarks timestamps_ms"
+        )
 
 
 def _to_raw_pixel_xy(landmarks_xyz: np.ndarray, width: int, height: int) -> np.ndarray:
@@ -203,7 +230,9 @@ def _save_trajectory_plot(
     fig, axes = plt.subplots(2, 1, figsize=(12, 7), sharex=True)
     for local_idx, stable_idx in enumerate(STABLE_IDXS):
         raw_dist = np.linalg.norm(raw_xy[:, stable_idx, :] - neutral_raw[local_idx], axis=1)
-        aligned_dist = np.linalg.norm(aligned_xy[:, stable_idx, :] - neutral_aligned[local_idx], axis=1)
+        aligned_dist = np.linalg.norm(
+            aligned_xy[:, stable_idx, :] - neutral_aligned[local_idx], axis=1
+        )
         raw_dist[~np.isfinite(raw_dist)] = np.nan
         aligned_dist[~np.isfinite(aligned_dist)] = np.nan
         axes[0].plot(frame_indices, raw_dist, linewidth=1.6, label=f"idx {stable_idx}")
@@ -221,7 +250,9 @@ def _save_trajectory_plot(
     plt.close(fig)
 
 
-def _open_overlay_writer(artifact_dir: Path, width: int, height: int, fps: float) -> tuple[Any, Path]:
+def _open_overlay_writer(
+    artifact_dir: Path, width: int, height: int, fps: float
+) -> tuple[Any, Path]:
     overlay_mp4 = artifact_dir / "alignment_overlay.mp4"
     writer = cv2.VideoWriter(
         str(overlay_mp4),
@@ -365,9 +396,15 @@ def run_alignment_visualization(
         segment_path=segment_path,
         aligned_path=aligned_path,
     )
-    resolved_landmarks = Path(landmarks_path) if landmarks_path is not None else artifact_dir / "landmarks.npz"
-    resolved_segment = Path(segment_path) if segment_path is not None else artifact_dir / "segment.json"
-    resolved_aligned = Path(aligned_path) if aligned_path is not None else artifact_dir / "landmarks_aligned.npz"
+    resolved_landmarks = (
+        Path(landmarks_path) if landmarks_path is not None else artifact_dir / "landmarks.npz"
+    )
+    resolved_segment = (
+        Path(segment_path) if segment_path is not None else artifact_dir / "segment.json"
+    )
+    resolved_aligned = (
+        Path(aligned_path) if aligned_path is not None else artifact_dir / "landmarks_aligned.npz"
+    )
 
     if not resolved_landmarks.exists():
         raise FileNotFoundError(_missing_landmarks_message(resolved_landmarks, video_path))
@@ -394,14 +431,18 @@ def run_alignment_visualization(
     raw_xy = _to_raw_pixel_xy(loaded.landmarks_xyz, width=width, height=height)
     aligned_xy = np.asarray(aligned_arrays["landmarks_xy_aligned"], dtype=np.float32)
 
-    neutral_idx = _load_segment_neutral_idx(resolved_segment, frame_count=loaded.frame_indices.shape[0])
+    neutral_idx = _load_segment_neutral_idx(
+        resolved_segment, frame_count=loaded.frame_indices.shape[0]
+    )
     valid_rows = np.where(
         loaded.presence
         & np.isfinite(raw_xy[:, STABLE_IDXS, :]).all(axis=(1, 2))
         & np.isfinite(aligned_xy[:, STABLE_IDXS, :]).all(axis=(1, 2))
     )[0]
     if valid_rows.size == 0:
-        raise ValueError("No valid presence=True frames with finite stable landmarks for visualization")
+        raise ValueError(
+            "No valid presence=True frames with finite stable landmarks for visualization"
+        )
 
     sampled_rows = _uniform_sample(valid_rows, n_samples=n_samples)
 

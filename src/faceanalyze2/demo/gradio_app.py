@@ -195,7 +195,9 @@ def _resolve_timeseries_file(result: dict[str, Any], artifact_dir: Path, run_id:
     return None
 
 
-def _empty_demo_outputs(status_md: str, raw_json: str, metrics_rows: list[dict[str, Any]] | None = None) -> tuple:
+def _empty_demo_outputs(
+    status_md: str, raw_json: str, metrics_rows: list[dict[str, Any]] | None = None
+) -> tuple:
     return (
         status_md,
         _rows_to_dataframe(metrics_rows or []),
@@ -434,4 +436,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -1,4 +1,4 @@
-﻿"""FaceAnalyze2 package."""
+"""FaceAnalyze2 package."""
 
 from faceanalyze2.api import dynamicAnalysis
 

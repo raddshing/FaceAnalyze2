@@ -1,1 +1,1 @@
-﻿"""Video IO interfaces."""
+"""Video IO interfaces."""

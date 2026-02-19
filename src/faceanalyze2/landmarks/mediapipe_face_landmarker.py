@@ -25,8 +25,8 @@ def _build_missing_model_message(model_path: Path) -> str:
         f"Model file not found: {model_path}\n"
         f"Official model URL: {OFFICIAL_FACE_LANDMARKER_MODEL_URL}\n"
         "PowerShell download example:\n"
-        f"New-Item -ItemType Directory -Force -Path \"{model_path.parent}\" | Out-Null\n"
-        f"Invoke-WebRequest -Uri \"{OFFICIAL_FACE_LANDMARKER_MODEL_URL}\" -OutFile \"{model_path}\""
+        f'New-Item -ItemType Directory -Force -Path "{model_path.parent}" | Out-Null\n'
+        f'Invoke-WebRequest -Uri "{OFFICIAL_FACE_LANDMARKER_MODEL_URL}" -OutFile "{model_path}"'
     )
 
 
