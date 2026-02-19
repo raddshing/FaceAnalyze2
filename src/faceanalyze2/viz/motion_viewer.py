@@ -1293,17 +1293,32 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
           const m=Math.sqrt(dx*dx+dy*dy);
           rawDisp2d[i]=Number.isFinite(m)?m:0;
         }
+        const peakDisp2d=new Array(pointCount).fill(0);
+        for(let i=0;i<pointCount;i+=1){
+          const b=baseNorm[i]||[0,0];
+          const p=peakNorm[i]||[0,0];
+          const dx=(p[0]-b[0])*width;
+          const dy=(p[1]-b[1])*height;
+          const m=Math.sqrt(dx*dx+dy*dy);
+          peakDisp2d[i]=Number.isFinite(m)?m:0;
+        }
         const quantile95=(arr)=>{const vals=arr.filter(v=>Number.isFinite(v));if(!vals.length)return 1.0;vals.sort((a,b)=>a-b);const idx=Math.max(0,Math.min(vals.length-1,Math.floor(0.95*(vals.length-1))));const q=vals[idx];if(q>1e-6)return q;const mx=Math.max(...vals);return mx>1e-6?mx:1.0;};
-        const globalScale=quantile95(rawDisp2d);
-        const magGlobal=rawDisp2d.map(v=>Math.max(0,Math.min(1,v/globalScale)));
-        const magRegion=new Array(pointCount).fill(0);
+        const globalScale=quantile95(peakDisp2d);
+        const regionScale=new Array(regionNames.length).fill(globalScale);
         for(let r=0;r<regionNames.length;r+=1){
-          const vals=[];for(let i=0;i<pointCount;i+=1){if(regionIds[i]===r){vals.push(rawDisp2d[i]);}}
-          const rScale=quantile95(vals);
-          for(let i=0;i<pointCount;i+=1){if(regionIds[i]===r){magRegion[i]=Math.max(0,Math.min(1,rawDisp2d[i]/rScale));}}
+          const vals=[];for(let i=0;i<pointCount;i+=1){if(regionIds[i]===r){vals.push(peakDisp2d[i]);}}
+          regionScale[r]=quantile95(vals);
+        }
+        const magGlobal=rawDisp2d.map(v=>clamp01(v/globalScale));
+        const magRegion=new Array(pointCount).fill(0);
+        for(let i=0;i<pointCount;i+=1){
+          const regionIdx=regionIds[i];
+          const scale=(regionIdx!=null&&regionIdx>=0&&regionIdx<regionScale.length)?regionScale[regionIdx]:globalScale;
+          magRegion[i]=clamp01(rawDisp2d[i]/scale);
         }
         const magArray=(normalizeMode==="region")?magRegion:magGlobal;
-        twoDRef.current={points:pointsPx,mag:magArray};
+        const displayMag=magArray.map(v=>clamp01(t*v));
+        twoDRef.current={points:pointsPx,mag:displayMag};
 
         if(showBackground2d&&currentImage&&currentImage.width>0){
           ctx.drawImage(currentImage,0,0,width,height);
@@ -1318,7 +1333,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
             if(a<0||b<0||c<0||a>=pointCount||b>=pointCount||c>=pointCount){continue;}
             if(!isRegionEnabled(a)||!isRegionEnabled(b)||!isRegionEnabled(c)){continue;}
             const pa=pointsPx[a],pb=pointsPx[b],pc=pointsPx[c];
-            const m=(magArray[a]+magArray[b]+magArray[c])/3.0;
+            const m=(displayMag[a]+displayMag[b]+displayMag[c])/3.0;
             if(!(m>0.001)){continue;}
             const color=colorFromValue(m);
             ctx.fillStyle=`rgba(${Math.round(color.r*255)},${Math.round(color.g*255)},${Math.round(color.b*255)},0.35)`;
@@ -1343,7 +1358,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
         for(let i=0;i<pointCount;i+=1){
           if(!isRegionEnabled(i)){continue;}
           const pxy=pointsPx[i];
-          const col=colorFromValue(magArray[i]);
+          const col=colorFromValue(displayMag[i]);
           ctx.fillStyle=`rgba(${Math.round(col.r*255)},${Math.round(col.g*255)},${Math.round(col.b*255)},0.95)`;
           ctx.beginPath();
           ctx.arc(pxy[0],pxy[1],pointRadius,0,Math.PI*2);
@@ -1365,7 +1380,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
               const ux=dx/norm;const uy=dy/norm;
               const sxy=pointsPx[i];
               const ex=sxy[0]+ux*len;const ey=sxy[1]+uy*len;
-              const col=colorFromValue(magArray[i]);
+              const col=colorFromValue(displayMag[i]);
               ctx.strokeStyle=`rgba(${Math.round(col.r*255)},${Math.round(col.g*255)},${Math.round(col.b*255)},0.92)`;
               ctx.fillStyle=ctx.strokeStyle;
               ctx.lineWidth=1.25;
