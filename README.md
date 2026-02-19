@@ -37,7 +37,13 @@ python -m pip install -e ".[dev,demo]"
 ```powershell
 python -m faceanalyze2 run --video "D:\local\sample.mp4" --task smile --model "models/face_landmarker.task" --stride 2
 ```
-> `--task` 옵션: `smile`, `brow`, `eyeclose` 중 선택 가능
+
+| 옵션 | 설명 | 기본값 |
+|---|---|---|
+| `--video` | 분석할 입력 영상 경로 (.mp4) | (필수) |
+| `--task` | 분석할 안면 움직임: `smile`, `brow`, `eyeclose` | (필수) |
+| `--model` | MediaPipe Face Landmarker 모델 파일 경로 | `models/face_landmarker.task` |
+| `--stride` | 프레임 샘플링 간격 (2 = 2프레임당 1프레임 처리) | `1` |
 
 
 ### ② viewer 생성
