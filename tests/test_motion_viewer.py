@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -74,6 +75,13 @@ def _write_synthetic_artifacts(tmp_path: Path, stem: str = "sample") -> Path:
     return artifact_root
 
 
+def _load_payload_from_html(html_path: Path) -> dict:
+    html = html_path.read_text(encoding="utf-8")
+    match = re.search(r"window\.MOTION_VIEWER_DATA=(.*?);\s*</script>", html, flags=re.DOTALL)
+    assert match is not None
+    return json.loads(match.group(1))
+
+
 def test_generate_motion_viewer_creates_html(tmp_path: Path) -> None:
     artifact_root = _write_synthetic_artifacts(tmp_path)
     result = generate_motion_viewer(video_path=tmp_path / "sample.mp4", artifact_root=artifact_root)
@@ -82,10 +90,28 @@ def test_generate_motion_viewer_creates_html(tmp_path: Path) -> None:
     assert html_path.exists()
     assert html_path.stat().st_size > 0
     html = html_path.read_text(encoding="utf-8")
+    payload = _load_payload_from_html(html_path)
     assert "MOTION_VIEWER_DATA" in html
     assert "three@0.128.0" in html
     assert "region normalize" in html
     assert "\"left_eye\"" in html
+    assert payload["neutral_image_base64"] is None
+    assert len(payload["uv_coords"]) == 478
+    assert len(payload["faces"]) > 0
+
+    faces = np.asarray(payload["faces"], dtype=np.int64)
+    assert faces.ndim == 2 and faces.shape[1] == 3
+    assert np.min(faces) >= 0
+    assert np.max(faces) < 478
+
+    with np.load(artifact_root / "sample" / "landmarks.npz") as npz:
+        landmarks = np.asarray(npz["landmarks_xyz"], dtype=np.float32)
+    test_idx = 61
+    expected_u = float(landmarks[0, test_idx, 0])
+    expected_v = float(1.0 - landmarks[0, test_idx, 1])
+    uv = payload["uv_coords"][test_idx]
+    assert np.isclose(float(uv[0]), expected_u, atol=1e-6)
+    assert np.isclose(float(uv[1]), expected_v, atol=1e-6)
 
 
 def test_generate_motion_viewer_guides_when_segment_missing(tmp_path: Path) -> None:

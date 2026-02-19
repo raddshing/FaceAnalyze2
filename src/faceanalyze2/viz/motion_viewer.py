@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -459,6 +460,85 @@ def _extract_facemesh_edges() -> list[list[int]]:
     return [[a, b] for a, b in sorted(edges)]
 
 
+def _extract_facemesh_faces(edges: list[list[int]]) -> list[list[int]]:
+    edge_set: set[tuple[int, int]] = set()
+    adjacency: dict[int, set[int]] = {}
+
+    for pair in edges:
+        if len(pair) != 2:
+            continue
+        a = int(pair[0])
+        b = int(pair[1])
+        if a < 0 or b < 0 or a >= LANDMARK_COUNT or b >= LANDMARK_COUNT or a == b:
+            continue
+        lo, hi = (a, b) if a < b else (b, a)
+        edge_set.add((lo, hi))
+        adjacency.setdefault(lo, set()).add(hi)
+        adjacency.setdefault(hi, set()).add(lo)
+
+    face_set: set[tuple[int, int, int]] = set()
+    for j, neighbors in adjacency.items():
+        sorted_neighbors = sorted(neighbors)
+        neighbor_count = len(sorted_neighbors)
+        for i_pos in range(neighbor_count):
+            i = sorted_neighbors[i_pos]
+            for k_pos in range(i_pos + 1, neighbor_count):
+                k = sorted_neighbors[k_pos]
+                lo, hi = (i, k) if i < k else (k, i)
+                if (lo, hi) not in edge_set:
+                    continue
+                tri = tuple(sorted((int(i), int(j), int(k))))
+                face_set.add(tri)
+
+    faces = [[a, b, c] for a, b, c in sorted(face_set)]
+    if not faces:
+        raise RuntimeError("Failed to derive FACEMESH faces from tessellation edges")
+    return faces
+
+
+def _build_uv_coords_from_normalized_xy(normalized_xy: np.ndarray) -> list[list[float]]:
+    xy = np.asarray(normalized_xy, dtype=np.float32)
+    if xy.shape != (LANDMARK_COUNT, 2):
+        raise ValueError(f"normalized_xy must have shape ({LANDMARK_COUNT}, 2), got {xy.shape}")
+
+    uv = np.zeros((LANDMARK_COUNT, 2), dtype=np.float32)
+    valid = np.isfinite(xy).all(axis=1)
+    uv[valid, 0] = xy[valid, 0]
+    uv[valid, 1] = 1.0 - xy[valid, 1]
+    return uv.astype(np.float32).tolist()
+
+
+def _extract_neutral_frame_base64(video_path: str | Path, frame_idx: int) -> str | None:
+    video = Path(video_path)
+    if not video.exists() or not video.is_file():
+        return None
+    if frame_idx < 0:
+        return None
+
+    try:
+        import cv2
+    except Exception:
+        return None
+
+    capture = cv2.VideoCapture(str(video))
+    if not capture.isOpened():
+        capture.release()
+        return None
+
+    try:
+        if not capture.set(cv2.CAP_PROP_POS_FRAMES, float(frame_idx)):
+            return None
+        ok, frame_bgr = capture.read()
+        if not ok or frame_bgr is None:
+            return None
+        encoded_ok, encoded = cv2.imencode(".png", frame_bgr)
+        if not encoded_ok:
+            return None
+        return base64.b64encode(encoded.tobytes()).decode("ascii")
+    finally:
+        capture.release()
+
+
 def _compute_interocular_distance(neutral_xyz: np.ndarray) -> float:
     a = neutral_xyz[33]
     b = neutral_xyz[263]
@@ -688,31 +768,223 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
     const friendlyRegion=name=>name.replaceAll("_"," ");
     function App(){
       const mountRef=React.useRef(null),tipRef=React.useRef(null),viewerRef=React.useRef(null);
+      const hasTexture=Boolean(data.neutral_image_base64)&&Array.isArray(data.uv_coords)&&data.uv_coords.length===data.base_xyz.length&&Array.isArray(data.faces)&&data.faces.length>0;
       const initialRegions=React.useMemo(()=>{const m={};data.region_names.forEach(n=>{m[n]=true});return m},[]);
       const [t,setT]=React.useState(1.0);
       const [showWire,setShowWire]=React.useState(true);
       const [showCones,setShowCones]=React.useState(true);
-      const [mode,setMode]=React.useState(data.params.normalize_default||"region");
+      const [normalizeMode,setNormalizeMode]=React.useState(data.params.normalize_default||"region");
+      const [renderMode,setRenderMode]=React.useState(hasTexture?"texture":"points");
+      const [showTextureOverlay,setShowTextureOverlay]=React.useState(true);
       const [coneScale,setConeScale]=React.useState(1.0);
       const [pointSize,setPointSize]=React.useState(2.8);
       const [regionEnabled,setRegionEnabled]=React.useState(initialRegions);
-      const settingsRef=React.useRef({t,showWire,showCones,mode,coneScale,pointSize,regionEnabled});
-      React.useEffect(()=>{settingsRef.current={t,showWire,showCones,mode,coneScale,pointSize,regionEnabled};if(viewerRef.current?.updateScene)viewerRef.current.updateScene()},[t,showWire,showCones,mode,coneScale,pointSize,regionEnabled]);
-      React.useEffect(()=>{if(!mountRef.current)return;const container=mountRef.current;const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));renderer.setSize(container.clientWidth,container.clientHeight);container.appendChild(renderer.domElement);const scene=new THREE.Scene();scene.background=new THREE.Color(0x0b1020);const camera=new THREE.PerspectiveCamera(42,container.clientWidth/Math.max(container.clientHeight,1),0.1,10000);const radius=Math.max(data.radius_hint||400,200);camera.position.set(radius*.8,radius*.45,radius*1.1);const controls=new SimpleOrbitControls(camera,renderer.domElement);controls.target.set(0,0,0);controls.update();scene.add(new THREE.HemisphereLight(0xffffff,0x233554,.78));const dl=new THREE.DirectionalLight(0xffffff,.56);dl.position.set(1,1,1);scene.add(dl);const pGeom=new THREE.BufferGeometry();const pMat=new THREE.PointsMaterial({size:2.8,vertexColors:true,transparent:true,opacity:.96,depthWrite:false});const points=new THREE.Points(pGeom,pMat);scene.add(points);const wGeom=new THREE.BufferGeometry();const wMat=new THREE.LineBasicMaterial({color:0x9ba7c6,transparent:true,opacity:.35});const wire=new THREE.LineSegments(wGeom,wMat);scene.add(wire);const arrows=new THREE.Group();scene.add(arrows);const ray=new THREE.Raycaster();ray.params.Points.threshold=6;const mouse=new THREE.Vector2();const lut=[];const base=data.base_xyz,disp=data.disp_xyz,dirs=data.unit_dir_xyz,magRegion=data.mag_region_norm,magGlobal=data.mag_global_norm,regionIds=data.region_ids,regionNames=data.region_names,edges=data.edges,pointCount=base.length;
+      const settingsRef=React.useRef({t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,coneScale,pointSize,regionEnabled});
+      React.useEffect(()=>{if(!hasTexture&&renderMode!=="points"){setRenderMode("points")}},[hasTexture,renderMode]);
+      React.useEffect(()=>{settingsRef.current={t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,coneScale,pointSize,regionEnabled};if(viewerRef.current?.updateScene)viewerRef.current.updateScene()},[t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,coneScale,pointSize,regionEnabled]);
+      React.useEffect(()=>{
+        if(!mountRef.current)return;
+        const container=mountRef.current;
+        const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+        renderer.setSize(container.clientWidth,container.clientHeight);
+        container.appendChild(renderer.domElement);
+
+        const scene=new THREE.Scene();
+        scene.background=new THREE.Color(0x0b1020);
+        const camera=new THREE.PerspectiveCamera(42,container.clientWidth/Math.max(container.clientHeight,1),0.1,10000);
+        const radius=Math.max(data.radius_hint||400,200);
+        camera.position.set(radius*.8,radius*.45,radius*1.1);
+        const controls=new SimpleOrbitControls(camera,renderer.domElement);
+        controls.target.set(0,0,0);
+        controls.update();
+
+        scene.add(new THREE.HemisphereLight(0xffffff,0x233554,.78));
+        const dl=new THREE.DirectionalLight(0xffffff,.56);
+        dl.position.set(1,1,1);
+        scene.add(dl);
+
+        const base=data.base_xyz,disp=data.disp_xyz,dirs=data.unit_dir_xyz,magRegion=data.mag_region_norm,magGlobal=data.mag_global_norm,regionIds=data.region_ids,regionNames=data.region_names,edges=data.edges,pointCount=base.length;
+        const pointsGeom=new THREE.BufferGeometry();
+        const pointsMat=new THREE.PointsMaterial({size:2.8,vertexColors:true,transparent:true,opacity:.96,depthWrite:false});
+        const pointsMesh=new THREE.Points(pointsGeom,pointsMat);
+        scene.add(pointsMesh);
+
+        const wireGeom=new THREE.BufferGeometry();
+        const wireMat=new THREE.LineBasicMaterial({color:0x9ba7c6,transparent:true,opacity:.35});
+        const wireMesh=new THREE.LineSegments(wireGeom,wireMat);
+        scene.add(wireMesh);
+
+        const arrows=new THREE.Group();
+        scene.add(arrows);
+
+        let textureMesh=null,overlayMesh=null,textureGeometry=null,texturePositionAttr=null,overlayColorAttr=null;
+        if(hasTexture){
+          const uvFlat=[];for(let i=0;i<data.uv_coords.length;i+=1){uvFlat.push(data.uv_coords[i][0],data.uv_coords[i][1]);}
+          const idxFlat=[];for(let i=0;i<data.faces.length;i+=1){idxFlat.push(data.faces[i][0],data.faces[i][1],data.faces[i][2]);}
+          textureGeometry=new THREE.BufferGeometry();
+          texturePositionAttr=new THREE.Float32BufferAttribute(new Float32Array(pointCount*3),3);
+          overlayColorAttr=new THREE.Float32BufferAttribute(new Float32Array(pointCount*3),3);
+          textureGeometry.setAttribute("position",texturePositionAttr);
+          textureGeometry.setAttribute("uv",new THREE.Float32BufferAttribute(uvFlat,2));
+          textureGeometry.setAttribute("color",overlayColorAttr);
+          textureGeometry.setIndex(idxFlat);
+          const tex=new THREE.TextureLoader().load(`data:image/png;base64,${data.neutral_image_base64}`);
+          tex.minFilter=THREE.LinearFilter;tex.magFilter=THREE.LinearFilter;
+          const textureMat=new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide});
+          const overlayMat=new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:.4,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
+          textureMesh=new THREE.Mesh(textureGeometry,textureMat);
+          overlayMesh=new THREE.Mesh(textureGeometry,overlayMat);
+          textureMesh.visible=false;overlayMesh.visible=false;
+          scene.add(textureMesh);scene.add(overlayMesh);
+        }
+
+        const ray=new THREE.Raycaster();
+        ray.params.Points.threshold=6;
+        const mouse=new THREE.Vector2();
+        const visiblePointLut=[];
+        let currentCoords=new Array(pointCount).fill([0,0,0]);
+        let currentMag=magRegion;
+
         const currentPoint=(i,k)=>[base[i][0]+k*disp[i][0],base[i][1]+k*disp[i][1],base[i][2]+k*disp[i][2]];
         const clearArrows=()=>{while(arrows.children.length)arrows.remove(arrows.children[0])};
-        const updateScene=()=>{const s=settingsRef.current;const coords=new Array(pointCount);const visible=new Array(pointCount).fill(false);for(let i=0;i<pointCount;i+=1){const p=currentPoint(i,s.t);coords[i]=p;const finite=Number.isFinite(p[0])&&Number.isFinite(p[1])&&Number.isFinite(p[2]);if(!finite)continue;visible[i]=!!s.regionEnabled[regionNames[regionIds[i]]]}const pos=[];const col=[];lut.length=0;const mag=s.mode==="region"?magRegion:magGlobal;for(let i=0;i<pointCount;i+=1){if(!visible[i])continue;const p=coords[i];pos.push(p[0],p[1],p[2]);const c=colorFromValue(s.t*mag[i]);col.push(c.r,c.g,c.b);lut.push(i)}pGeom.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));pGeom.setAttribute("color",new THREE.Float32BufferAttribute(col,3));pGeom.computeBoundingSphere();pMat.size=s.pointSize;wire.visible=s.showWire;const wPos=[];if(s.showWire){for(let i=0;i<edges.length;i+=1){const a=edges[i][0],b=edges[i][1];if(!visible[a]||!visible[b])continue;const pa=coords[a],pb=coords[b];wPos.push(pa[0],pa[1],pa[2],pb[0],pb[1],pb[2])}}wGeom.setAttribute("position",new THREE.Float32BufferAttribute(wPos,3));wGeom.computeBoundingSphere();clearArrows();if(s.showCones&&s.t>0){const len=data.cone_length_px*s.coneScale*s.t;for(let i=0;i<pointCount;i+=1){if(!visible[i])continue;const u=dirs[i];if(!Number.isFinite(u[0])||!Number.isFinite(u[1])||!Number.isFinite(u[2]))continue;const magU=Math.sqrt(u[0]*u[0]+u[1]*u[1]+u[2]*u[2]);if(magU<1e-6)continue;const d=new THREE.Vector3(u[0],u[1],u[2]).normalize();const o=coords[i];const color=colorFromValue(s.t*mag[i]).hex;const headLen=Math.max(len*.35,1.1);const headW=Math.max(len*.2,.75);arrows.add(new THREE.ArrowHelper(d,new THREE.Vector3(o[0],o[1],o[2]),len,color,headLen,headW))}}arrows.visible=s.showCones};
+        const updateScene=()=>{
+          const s=settingsRef.current;
+          const coords=new Array(pointCount);
+          const visible=new Array(pointCount).fill(false);
+          const mag=s.normalizeMode==="region"?magRegion:magGlobal;
+          currentCoords=coords;currentMag=mag;
+
+          for(let i=0;i<pointCount;i+=1){
+            const p=currentPoint(i,s.t);coords[i]=p;
+            const finite=Number.isFinite(p[0])&&Number.isFinite(p[1])&&Number.isFinite(p[2]);
+            if(!finite)continue;
+            visible[i]=!!s.regionEnabled[regionNames[regionIds[i]]];
+          }
+
+          const pos=[];const col=[];visiblePointLut.length=0;
+          for(let i=0;i<pointCount;i+=1){
+            if(!visible[i])continue;
+            const p=coords[i];pos.push(p[0],p[1],p[2]);
+            const c=colorFromValue(s.t*mag[i]);col.push(c.r,c.g,c.b);visiblePointLut.push(i);
+          }
+          pointsGeom.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));
+          pointsGeom.setAttribute("color",new THREE.Float32BufferAttribute(col,3));
+          pointsGeom.computeBoundingSphere();
+          pointsMat.size=s.pointSize;
+          pointsMesh.visible=s.renderMode==="points";
+
+          const wPos=[];
+          if(s.showWire){for(let i=0;i<edges.length;i+=1){const a=edges[i][0],b=edges[i][1];if(!visible[a]||!visible[b])continue;const pa=coords[a],pb=coords[b];wPos.push(pa[0],pa[1],pa[2],pb[0],pb[1],pb[2]);}}
+          wireGeom.setAttribute("position",new THREE.Float32BufferAttribute(wPos,3));
+          wireGeom.computeBoundingSphere();
+          wireMesh.visible=s.showWire;
+
+          clearArrows();
+          if(s.showCones&&s.t>0){
+            const len=data.cone_length_px*s.coneScale*s.t;
+            for(let i=0;i<pointCount;i+=1){
+              if(!visible[i])continue;
+              const u=dirs[i];
+              if(!Number.isFinite(u[0])||!Number.isFinite(u[1])||!Number.isFinite(u[2]))continue;
+              const magU=Math.sqrt(u[0]*u[0]+u[1]*u[1]+u[2]*u[2]);
+              if(magU<1e-6)continue;
+              const d=new THREE.Vector3(u[0],u[1],u[2]).normalize();
+              const o=coords[i];
+              const color=colorFromValue(s.t*mag[i]).hex;
+              arrows.add(new THREE.ArrowHelper(d,new THREE.Vector3(o[0],o[1],o[2]),len,color,Math.max(len*.35,1.1),Math.max(len*.2,.75)));
+            }
+          }
+          arrows.visible=s.showCones;
+
+          if(hasTexture&&texturePositionAttr&&overlayColorAttr&&textureMesh&&overlayMesh){
+            for(let i=0;i<pointCount;i+=1){
+              const p=coords[i];
+              const finite=Number.isFinite(p[0])&&Number.isFinite(p[1])&&Number.isFinite(p[2]);
+              texturePositionAttr.setXYZ(i,finite?p[0]:0,finite?p[1]:0,finite?p[2]:0);
+              const c=colorFromValue(s.t*mag[i]);
+              overlayColorAttr.setXYZ(i,visible[i]?c.r:0,visible[i]?c.g:0,visible[i]?c.b:0);
+            }
+            texturePositionAttr.needsUpdate=true;
+            overlayColorAttr.needsUpdate=true;
+            textureGeometry.computeBoundingSphere();
+            textureMesh.visible=s.renderMode==="texture";
+            overlayMesh.visible=s.renderMode==="texture"&&s.showTextureOverlay;
+          }
+        };
+
         const hideTip=()=>{if(tipRef.current)tipRef.current.style.display="none"};
-        const onMove=e=>{if(!tipRef.current)return;const rect=renderer.domElement.getBoundingClientRect();mouse.x=((e.clientX-rect.left)/Math.max(rect.width,1))*2-1;mouse.y=-((e.clientY-rect.top)/Math.max(rect.height,1))*2+1;ray.setFromCamera(mouse,camera);const hits=ray.intersectObject(points);if(!hits.length||hits[0].index==null){hideTip();return}const vi=hits[0].index;const li=lut[vi];if(li==null){hideTip();return}const s=settingsRef.current;const mag=(s.mode==="region"?data.mag_region_norm:data.mag_global_norm);tipRef.current.style.display="block";tipRef.current.style.left=`${e.clientX-rect.left+14}px`;tipRef.current.style.top=`${e.clientY-rect.top+14}px`;tipRef.current.innerHTML=`<b>Landmark #${li}</b><br/>Region: ${friendlyRegion(data.region_names[data.region_ids[li]])}<br/>Norm mag: ${(s.t*mag[li]).toFixed(3)}`};
+        const showTip=(event,idx)=>{if(!tipRef.current)return;const rect=renderer.domElement.getBoundingClientRect();tipRef.current.style.display="block";tipRef.current.style.left=`${event.clientX-rect.left+14}px`;tipRef.current.style.top=`${event.clientY-rect.top+14}px`;const s=settingsRef.current;const mag=s.normalizeMode==="region"?magRegion:magGlobal;tipRef.current.innerHTML=`<b>Landmark #${idx}</b><br/>Region: ${friendlyRegion(regionNames[regionIds[idx]])}<br/>Norm mag: ${(s.t*mag[idx]).toFixed(3)}`};
+        const onMove=e=>{
+          const rect=renderer.domElement.getBoundingClientRect();
+          mouse.x=((e.clientX-rect.left)/Math.max(rect.width,1))*2-1;
+          mouse.y=-((e.clientY-rect.top)/Math.max(rect.height,1))*2+1;
+          ray.setFromCamera(mouse,camera);
+          const s=settingsRef.current;
+          if(s.renderMode==="texture"&&hasTexture&&textureMesh){
+            const hits=ray.intersectObject(textureMesh);
+            if(!hits.length||!hits[0].face){hideTip();return}
+            const hit=hits[0],cand=[hit.face.a,hit.face.b,hit.face.c];
+            let best=cand[0],bestD=Number.POSITIVE_INFINITY;
+            for(let i=0;i<cand.length;i+=1){const idx=cand[i];const p=currentCoords[idx];if(!p)continue;const d=Math.sqrt((p[0]-hit.point.x)**2+(p[1]-hit.point.y)**2+(p[2]-hit.point.z)**2);if(d<bestD){bestD=d;best=idx}}
+            showTip(e,best);return;
+          }
+          const hits=ray.intersectObject(pointsMesh);
+          if(!hits.length||hits[0].index==null){hideTip();return}
+          const vIdx=hits[0].index;const lIdx=visiblePointLut[vIdx];
+          if(lIdx==null){hideTip();return}
+          showTip(e,lIdx);
+        };
+
         const onResize=()=>{const w=container.clientWidth,h=container.clientHeight;renderer.setSize(w,h);camera.aspect=w/Math.max(h,1);camera.updateProjectionMatrix()};
-        renderer.domElement.addEventListener("mousemove",onMove);renderer.domElement.addEventListener("mouseleave",hideTip);window.addEventListener("resize",onResize);
-        let raf=0;const loop=()=>{controls.update();renderer.render(scene,camera);raf=requestAnimationFrame(loop)};
+        renderer.domElement.addEventListener("mousemove",onMove);
+        renderer.domElement.addEventListener("mouseleave",hideTip);
+        window.addEventListener("resize",onResize);
+
+        let raf=0;
+        const loop=()=>{controls.update();renderer.render(scene,camera);raf=requestAnimationFrame(loop)};
         viewerRef.current={updateScene,exportPng:()=>{renderer.render(scene,camera);const url=renderer.domElement.toDataURL("image/png");const a=document.createElement("a");a.href=url;a.download="motion_viewer.png";a.click()}};
-        updateScene();loop();
+        updateScene();
+        loop();
         return()=>{cancelAnimationFrame(raf);renderer.domElement.removeEventListener("mousemove",onMove);renderer.domElement.removeEventListener("mouseleave",hideTip);window.removeEventListener("resize",onResize);controls.dispose();renderer.dispose();if(container.contains(renderer.domElement))container.removeChild(renderer.domElement)};
       },[]);
       const toggleRegion=name=>setRegionEnabled(prev=>({...prev,[name]:!prev[name]}));
-      return(<div className="app"><aside className="panel"><h3 style={{margin:"0 0 8px 0"}}>FaceAnalyze2 Motion Viewer</h3><div className="row" style={{fontSize:12,color:"#93a1c8"}}>neutral #{data.frame_indices[data.neutral_idx]} -> peak #{data.frame_indices[data.peak_idx]}</div><div className="row"><label>t = {t.toFixed(2)}</label><input type="range" min="0" max="1" step="0.01" value={t} onChange={e=>setT(parseFloat(e.target.value))}/></div><div className="row"><label><input type="checkbox" checked={showWire} onChange={e=>setShowWire(e.target.checked)}/>wireframe</label></div><div className="row"><label><input type="checkbox" checked={showCones} onChange={e=>setShowCones(e.target.checked)}/>cones</label></div><div className="row"><label>normalize mode</label><select value={mode} onChange={e=>setMode(e.target.value)}><option value="region">region normalize</option><option value="global">global normalize</option></select></div><div className="row"><label>cone scale: {coneScale.toFixed(2)}</label><input type="range" min="0.2" max="3.0" step="0.05" value={coneScale} onChange={e=>setConeScale(parseFloat(e.target.value))}/></div><div className="row"><label>point size: {pointSize.toFixed(1)}</label><input type="range" min="1" max="8" step="0.2" value={pointSize} onChange={e=>setPointSize(parseFloat(e.target.value))}/></div><div className="row"><button onClick={()=>viewerRef.current?.exportPng?.()}>export png</button></div><div className="checks">{data.region_names.map((name,idx)=><label key={name}><input type="checkbox" checked={!!regionEnabled[name]} onChange={()=>toggleRegion(name)}/>{friendlyRegion(name)} ({data.region_scales[idx].toFixed(3)})</label>)}</div><div className="row" style={{marginTop:10}}><div className="legend"/></div><div className="meta"><div><b>residual max:</b> {data.quality.residual_max==null?"n/a":data.quality.residual_max.toFixed(4)}</div><div><b>residual mean:</b> {data.quality.residual_mean==null?"n/a":data.quality.residual_mean.toFixed(4)}</div><div><b>valid frames:</b> {data.quality.valid_frames}/{data.quality.total_frames}</div><div><b>neutral replaced:</b> {String(data.quality.neutral_replaced)}</div><div><b>peak replaced:</b> {String(data.quality.peak_replaced)}</div><div><b>cone length px:</b> {data.cone_length_px.toFixed(2)}</div><div><b>flipY:</b> {String(data.params.flip_y)} | <b>flipZ:</b> {String(data.params.flip_z)} | <b>z_scale:</b> {data.params.z_scale}</div></div></aside><section className="viewer"><div ref={mountRef} className="mount"/><div ref={tipRef} className="tt"/></section></div>);
+      return(
+        <div className="app">
+          <aside className="panel">
+            <h3 style={{margin:"0 0 8px 0"}}>FaceAnalyze2 Motion Viewer</h3>
+            <div className="row" style={{fontSize:12,color:"#93a1c8"}}>neutral #{data.frame_indices[data.neutral_idx]} - peak #{data.frame_indices[data.peak_idx]}</div>
+            <div className="row">
+              <label>mode</label>
+              <select value={renderMode} onChange={e=>setRenderMode(e.target.value)} disabled={!hasTexture}>
+                <option value="texture">texture</option>
+                <option value="points">points</option>
+              </select>
+            </div>
+            {!hasTexture && <div className="row" style={{fontSize:12,color:"#93a1c8"}}>texture unavailable (video/frame read failed)</div>}
+            <div className="row"><label>t = {t.toFixed(2)}</label><input type="range" min="0" max="1" step="0.01" value={t} onChange={e=>setT(parseFloat(e.target.value))}/></div>
+            <div className="row"><label><input type="checkbox" checked={showWire} onChange={e=>setShowWire(e.target.checked)}/>wireframe</label></div>
+            <div className="row"><label><input type="checkbox" checked={showCones} onChange={e=>setShowCones(e.target.checked)}/>cones</label></div>
+            {hasTexture&&renderMode==="texture"&&(<div className="row"><label><input type="checkbox" checked={showTextureOverlay} onChange={e=>setShowTextureOverlay(e.target.checked)}/>texture overlay</label></div>)}
+            <div className="row"><label>normalize mode</label><select value={normalizeMode} onChange={e=>setNormalizeMode(e.target.value)}><option value="region">region normalize</option><option value="global">global normalize</option></select></div>
+            <div className="row"><label>cone scale: {coneScale.toFixed(2)}</label><input type="range" min="0.2" max="3.0" step="0.05" value={coneScale} onChange={e=>setConeScale(parseFloat(e.target.value))}/></div>
+            <div className="row"><label>point size: {pointSize.toFixed(1)}</label><input type="range" min="1" max="8" step="0.2" value={pointSize} onChange={e=>setPointSize(parseFloat(e.target.value))}/></div>
+            <div className="row"><button onClick={()=>viewerRef.current?.exportPng?.()}>export png</button></div>
+            <div className="checks">{data.region_names.map((name,idx)=><label key={name}><input type="checkbox" checked={!!regionEnabled[name]} onChange={()=>toggleRegion(name)}/>{friendlyRegion(name)} ({data.region_scales[idx].toFixed(3)})</label>)}</div>
+            <div className="row" style={{marginTop:10}}><div className="legend"/></div>
+            <div className="meta">
+              <div><b>residual max:</b> {data.quality.residual_max==null?"n/a":data.quality.residual_max.toFixed(4)}</div>
+              <div><b>residual mean:</b> {data.quality.residual_mean==null?"n/a":data.quality.residual_mean.toFixed(4)}</div>
+              <div><b>valid frames:</b> {data.quality.valid_frames}/{data.quality.total_frames}</div>
+              <div><b>neutral replaced:</b> {String(data.quality.neutral_replaced)}</div>
+              <div><b>peak replaced:</b> {String(data.quality.peak_replaced)}</div>
+              <div><b>cone length px:</b> {data.cone_length_px.toFixed(2)}</div>
+              <div><b>flipY:</b> {String(data.params.flip_y)} | <b>flipZ:</b> {String(data.params.flip_z)} | <b>z_scale:</b> {data.params.z_scale}</div>
+            </div>
+          </aside>
+          <section className="viewer"><div ref={mountRef} className="mount"/><div ref={tipRef} className="tt"/></section>
+        </div>
+      );
     }
     ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
   </script>
@@ -773,6 +1045,16 @@ def generate_motion_viewer(
         flip_z=DEFAULT_FLIP_Z,
         z_scale=DEFAULT_Z_SCALE,
     )
+
+    neutral_row_idx = int(viewer_payload["neutral_idx"])
+    neutral_video_frame_idx = int(arrays["frame_indices"][neutral_row_idx])
+    neutral_xy_norm = np.asarray(arrays["landmarks_xyz"][neutral_row_idx, :, :2], dtype=np.float32)
+    viewer_payload["neutral_image_base64"] = _extract_neutral_frame_base64(
+        video_path=video_path,
+        frame_idx=neutral_video_frame_idx,
+    )
+    viewer_payload["uv_coords"] = _build_uv_coords_from_normalized_xy(neutral_xy_norm)
+    viewer_payload["faces"] = _extract_facemesh_faces(viewer_payload["edges"])
 
     html = _render_motion_viewer_html(viewer_payload)
     paths.artifact_dir.mkdir(parents=True, exist_ok=True)
