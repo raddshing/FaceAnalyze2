@@ -44,6 +44,7 @@ def test_compute_roi_displacements_expected_values() -> None:
     assert result["reversed"] is False
     assert np.array_equal(result["frame_indices"], np.asarray([11, 12, 13, 14], dtype=np.int64))
     assert np.isclose(result["metrics"]["mouth"]["AI"], 2.0 / 3.0, atol=1e-6)
+    assert np.isclose(result["metrics"]["mouth"]["score"], 100.0 / 3.0, atol=1e-6)
 
 
 def test_compute_roi_displacements_reversed_case_and_presence_mask() -> None:
@@ -74,3 +75,4 @@ def test_compute_roi_displacements_reversed_case_and_presence_mask() -> None:
     assert np.isclose(mouth["left_disp"][3], 3.0, atol=1e-6)
     assert np.isclose(result["metrics"]["mouth"]["L_peak"], 3.0, atol=1e-6)
     assert np.isclose(result["metrics"]["mouth"]["R_peak"], 1.5, atol=1e-6)
+    assert np.isclose(result["metrics"]["mouth"]["score"], 100.0 / 3.0, atol=1e-6)
