@@ -37,6 +37,8 @@ python -m pip install -e ".[dev,demo]"
 ```powershell
 python -m faceanalyze2 run --video "D:\local\sample.mp4" --task smile --model "models/face_landmarker.task" --stride 2
 ```
+> `--task` 옵션: `smile`, `brow`, `eyeclose` 중 선택 가능
+
 
 ### ② viewer 생성
 ```powershell
