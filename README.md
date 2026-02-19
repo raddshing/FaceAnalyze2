@@ -113,14 +113,14 @@ result = dynamicAnalysis(vd_path, motion)
 > 이미지 값에는 `data:image/...` prefix가 포함되어 있지 않습니다. 프론트에서 표시할 때 직접 붙여주세요.
 
 ### 비대칭 지수 계산
-- **AI** = `abs(L_peak - R_peak) / max(ε, (L_peak + R_peak) / 2)`
+- **AI(Asymmetry Index)** = `abs(L_peak - R_peak) / max(ε, (L_peak + R_peak) / 2)`
 - **score** = `(1 - clamp(AI, 0, 1)) × 100`
   - 0점 = 완전 비대칭, 100점 = 완전 대칭
 
 프론트 연동 상세 계약은 [`docs/FRONTEND_INTEGRATION.md`](docs/FRONTEND_INTEGRATION.md)를 참고하세요.
 
 ## 7) 보안/주의
-- 환자 영상/프레임/landmark 결과는 PHI를 포함할 수 있습니다.
+- 환자 영상/프레임/landmark 결과는 환자 개인정보가 포함할 수 있습니다.
 - `motion_viewer.html`, Gradio demo 화면/파일은 외부 공유 금지입니다.
 - Gradio는 로컬 전용이며 `share=True`를 사용하지 않습니다.
 - `artifacts/`, `demo_inputs/`, `demo_outputs/`, `models/*.task`는 git 커밋 금지 정책입니다.
