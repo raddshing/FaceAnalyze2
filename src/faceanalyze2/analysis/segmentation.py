@@ -93,7 +93,7 @@ def _resolve_landmark_paths(
 def _missing_landmarks_message(npz_path: Path, video_path: str | Path) -> str:
     return (
         f"Landmarks file not found: {npz_path}\n"
-        f"Run this first:\nfaceanalyze2 landmarks extract --video \"{video_path}\""
+        f'Run this first:\nfaceanalyze2 landmarks extract --video "{video_path}"'
     )
 
 
@@ -236,7 +236,9 @@ def compute_task_signal(task: str, pixel_xy: np.ndarray) -> np.ndarray:
     interocular = _pairwise_distance(pixel_xy, 33, 263)
 
     if task_name == "smile":
-        width_norm = _safe_divide(_pairwise_distance(pixel_xy, MOUTH_CORNERS[0], MOUTH_CORNERS[1]), interocular)
+        width_norm = _safe_divide(
+            _pairwise_distance(pixel_xy, MOUTH_CORNERS[0], MOUTH_CORNERS[1]), interocular
+        )
         inner_area = _polygon_area(pixel_xy, INNER_LIP)
         area_norm = _safe_divide(inner_area, np.square(interocular))
         area_norm = np.where(area_norm >= 0, area_norm, np.nan)
@@ -251,7 +253,9 @@ def compute_task_signal(task: str, pixel_xy: np.ndarray) -> np.ndarray:
         inverted = max_area - eye_area_norm
         return robust_z(inverted).astype(np.float32)
 
-    brow_y = np.nanmean(np.stack([_mean_y(pixel_xy, LEFT_BROW), _mean_y(pixel_xy, RIGHT_BROW)], axis=0), axis=0)
+    brow_y = np.nanmean(
+        np.stack([_mean_y(pixel_xy, LEFT_BROW), _mean_y(pixel_xy, RIGHT_BROW)], axis=0), axis=0
+    )
     eye_y = _mean_y(pixel_xy, [33, 133, 263, 362])
     gap_norm = _safe_divide(eye_y - brow_y, interocular)
     return robust_z(gap_norm).astype(np.float32)

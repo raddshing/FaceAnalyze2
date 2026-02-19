@@ -29,4 +29,3 @@ def test_motion_to_task_mapping_and_metrics_rows() -> None:
     assert rows[0]["roi"] == "eye"
     assert rows[1]["roi"] == "mouth"
     assert "score" in rows[1]
-

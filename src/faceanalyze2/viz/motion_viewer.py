@@ -80,8 +80,12 @@ def _resolve_paths(
         landmarks_path=landmarks_path,
         segment_path=segment_path,
     )
-    resolved_landmarks = Path(landmarks_path) if landmarks_path is not None else artifact_dir / "landmarks.npz"
-    resolved_segment = Path(segment_path) if segment_path is not None else artifact_dir / "segment.json"
+    resolved_landmarks = (
+        Path(landmarks_path) if landmarks_path is not None else artifact_dir / "landmarks.npz"
+    )
+    resolved_segment = (
+        Path(segment_path) if segment_path is not None else artifact_dir / "segment.json"
+    )
     return MotionViewerPaths(
         artifact_dir=artifact_dir,
         landmarks_path=resolved_landmarks,
@@ -95,7 +99,7 @@ def _missing_landmarks_message(path: Path, video_path: str | Path) -> str:
     return (
         f"Landmarks file not found: {path}\n"
         "Run this first:\n"
-        f"faceanalyze2 landmarks extract --video \"{video_path}\""
+        f'faceanalyze2 landmarks extract --video "{video_path}"'
     )
 
 
@@ -103,7 +107,7 @@ def _missing_segment_message(path: Path, video_path: str | Path) -> str:
     return (
         f"Segment file not found: {path}\n"
         "Run this first:\n"
-        f"faceanalyze2 segment run --video \"{video_path}\" --task <smile|brow|eyeclose>"
+        f'faceanalyze2 segment run --video "{video_path}" --task <smile|brow|eyeclose>'
     )
 
 
@@ -111,7 +115,7 @@ def _missing_meta_message(path: Path, video_path: str | Path) -> str:
     return (
         f"Metadata file not found: {path}\n"
         "Run this first:\n"
-        f"faceanalyze2 landmarks extract --video \"{video_path}\""
+        f'faceanalyze2 landmarks extract --video "{video_path}"'
     )
 
 
@@ -136,10 +140,16 @@ def _load_landmark_arrays(npz_path: Path) -> dict[str, np.ndarray]:
     if presence.ndim != 1:
         raise ValueError("presence must be 1D")
     if landmarks_xyz.ndim != 3 or landmarks_xyz.shape[1:] != (LANDMARK_COUNT, 3):
-        raise ValueError(f"landmarks_xyz must have shape (T, {LANDMARK_COUNT}, 3), got {landmarks_xyz.shape}")
+        raise ValueError(
+            f"landmarks_xyz must have shape (T, {LANDMARK_COUNT}, 3), got {landmarks_xyz.shape}"
+        )
 
     t_count = timestamps_ms.shape[0]
-    if frame_indices.shape[0] != t_count or presence.shape[0] != t_count or landmarks_xyz.shape[0] != t_count:
+    if (
+        frame_indices.shape[0] != t_count
+        or presence.shape[0] != t_count
+        or landmarks_xyz.shape[0] != t_count
+    ):
         raise ValueError("Array length mismatch in landmarks.npz")
 
     return {
@@ -177,9 +187,13 @@ def _load_segment(segment_path: Path, frame_count: int) -> dict[str, Any]:
     neutral_idx = int(payload["neutral_idx"])
     peak_idx = int(payload["peak_idx"])
     if neutral_idx < 0 or neutral_idx >= frame_count:
-        raise ValueError(f"segment.json neutral_idx out of range: {neutral_idx} (frame_count={frame_count})")
+        raise ValueError(
+            f"segment.json neutral_idx out of range: {neutral_idx} (frame_count={frame_count})"
+        )
     if peak_idx < 0 or peak_idx >= frame_count:
-        raise ValueError(f"segment.json peak_idx out of range: {peak_idx} (frame_count={frame_count})")
+        raise ValueError(
+            f"segment.json peak_idx out of range: {peak_idx} (frame_count={frame_count})"
+        )
     payload["neutral_idx"] = neutral_idx
     payload["peak_idx"] = peak_idx
     return payload
@@ -193,7 +207,9 @@ def _to_pseudo_pixel_3d(landmarks_xyz: np.ndarray, *, width: int, height: int) -
     return xyz
 
 
-def estimate_rigid_transform_3d(src_pts: np.ndarray, dst_pts: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
+def estimate_rigid_transform_3d(
+    src_pts: np.ndarray, dst_pts: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, float]:
     src = np.asarray(src_pts, dtype=np.float64)
     dst = np.asarray(dst_pts, dtype=np.float64)
 
@@ -402,7 +418,9 @@ def _normalize_magnitude(
     global_scale = _safe_quantile_scale(magnitude)
     mag_global = np.zeros(magnitude.shape, dtype=np.float32)
     finite_global = np.isfinite(magnitude)
-    mag_global[finite_global] = np.clip(magnitude[finite_global] / global_scale, 0.0, 1.0).astype(np.float32)
+    mag_global[finite_global] = np.clip(magnitude[finite_global] / global_scale, 0.0, 1.0).astype(
+        np.float32
+    )
 
     mag_region = np.zeros(magnitude.shape, dtype=np.float32)
     region_scales = np.full((n_regions,), global_scale, dtype=np.float32)
@@ -709,7 +727,9 @@ def _build_quality_payload(
         "residual_neutral": (
             float(residuals[neutral_idx_used]) if np.isfinite(residuals[neutral_idx_used]) else None
         ),
-        "residual_peak": float(residuals[peak_idx_used]) if np.isfinite(residuals[peak_idx_used]) else None,
+        "residual_peak": float(residuals[peak_idx_used])
+        if np.isfinite(residuals[peak_idx_used])
+        else None,
     }
 
 
@@ -778,8 +798,12 @@ def _build_viewer_payload(
 
     unit_dir = np.zeros_like(disp_xyz_three, dtype=np.float32)
     disp_norm = np.linalg.norm(disp_xyz_three, axis=1)
-    valid_dir = np.isfinite(disp_xyz_three).all(axis=1) & np.isfinite(disp_norm) & (disp_norm > EPSILON)
-    unit_dir[valid_dir] = (disp_xyz_three[valid_dir] / disp_norm[valid_dir, None]).astype(np.float32)
+    valid_dir = (
+        np.isfinite(disp_xyz_three).all(axis=1) & np.isfinite(disp_norm) & (disp_norm > EPSILON)
+    )
+    unit_dir[valid_dir] = (disp_xyz_three[valid_dir] / disp_norm[valid_dir, None]).astype(
+        np.float32
+    )
 
     cone_length = float(
         np.clip(
@@ -842,7 +866,9 @@ def _build_viewer_payload(
 
 
 def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
-    data_json = json.dumps(viewer_payload, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/")
+    data_json = json.dumps(viewer_payload, separators=(",", ":"), ensure_ascii=False).replace(
+        "</", "<\\/"
+    )
     template = """<!doctype html>
 <html lang="en">
 <head>

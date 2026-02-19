@@ -78,19 +78,19 @@ def _status_recommendation(
     if not model_exists:
         return (
             "Invoke-WebRequest -Uri "
-            "\"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task\" "
-            "-OutFile \"models/face_landmarker.task\""
+            '"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" '
+            '-OutFile "models/face_landmarker.task"'
         )
     if not landmarks_exists:
-        return f"faceanalyze2 landmarks extract --video \"{video}\" --model \"models/face_landmarker.task\""
+        return f'faceanalyze2 landmarks extract --video "{video}" --model "models/face_landmarker.task"'
     if not segment_exists:
-        return f"faceanalyze2 segment run --video \"{video}\" --task {task_hint}"
+        return f'faceanalyze2 segment run --video "{video}" --task {task_hint}'
     if not aligned_exists:
-        return f"faceanalyze2 align run --video \"{video}\""
+        return f'faceanalyze2 align run --video "{video}"'
     if not metrics_exists:
-        return f"faceanalyze2 metrics run --video \"{video}\" --task {task_hint}"
+        return f'faceanalyze2 metrics run --video "{video}" --task {task_hint}'
     if not plots_exists:
-        return f"faceanalyze2 align viz --video \"{video}\""
+        return f'faceanalyze2 align viz --video "{video}"'
     return "모든 주요 산출물이 준비되었습니다. 필요하면 --force 옵션으로 재실행하세요."
 
 
@@ -98,7 +98,11 @@ def _should_skip(force: bool, outputs: list[Path], overlay_optional: bool = Fals
     if force:
         return False
     if overlay_optional:
-        return outputs[0].exists() and outputs[1].exists() and (outputs[2].exists() or outputs[3].exists())
+        return (
+            outputs[0].exists()
+            and outputs[1].exists()
+            and (outputs[2].exists() or outputs[3].exists())
+        )
     return all(path.exists() for path in outputs)
 
 
@@ -159,7 +163,7 @@ def guide() -> None:
     console.print('   faceanalyze2 align run --video "D:\\local\\sample.mp4"')
     console.print('   faceanalyze2 metrics run --video "D:\\local\\sample.mp4" --task smile')
     console.print('   faceanalyze2 align viz --video "D:\\local\\sample.mp4"')
-    console.print("4) 현재 상태 확인: faceanalyze2 status --video \"D:\\local\\sample.mp4\"")
+    console.print('4) 현재 상태 확인: faceanalyze2 status --video "D:\\local\\sample.mp4"')
 
 
 @app.command("status")
@@ -365,7 +369,10 @@ def run_pipeline(
         )
         if skip:
             console.print("- 기존 산출물이 있어 이 단계는 스킵합니다. (--force로 재생성 가능)")
-            _step_footer(outputs=[Path(path) for path in step["outputs"][:2]], next_manual_command=next_manual)
+            _step_footer(
+                outputs=[Path(path) for path in step["outputs"][:2]],
+                next_manual_command=next_manual,
+            )
             continue
 
         try:

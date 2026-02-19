@@ -1,1 +1,1 @@
-﻿"""Visualization interfaces."""
+"""Visualization interfaces."""

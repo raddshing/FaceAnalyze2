@@ -75,7 +75,9 @@ def _write_synthetic_artifacts(tmp_path: Path, stem: str = "sample") -> Path:
     return artifact_root
 
 
-def _write_dummy_video(video_path: Path, *, width: int = 640, height: int = 480, frame_count: int = 4) -> None:
+def _write_dummy_video(
+    video_path: Path, *, width: int = 640, height: int = 480, frame_count: int = 4
+) -> None:
     cv2 = pytest.importorskip("cv2")
     fourcc = cv2.VideoWriter_fourcc(*"MJPG")
     writer = cv2.VideoWriter(str(video_path), fourcc, 30.0, (width, height))
@@ -111,8 +113,8 @@ def test_generate_motion_viewer_creates_html(tmp_path: Path) -> None:
     assert "MOTION_VIEWER_DATA" in html
     assert "three@0.128.0" in html
     assert "region normalize" in html
-    assert "\"left_eye\"" in html
-    assert "value=\"2d\"" in html
+    assert '"left_eye"' in html
+    assert 'value="2d"' in html
     assert payload["neutral_image_base64"] is None
     assert len(payload["uv_coords"]) == 478
     assert len(payload["faces"]) > 0
@@ -187,4 +189,3 @@ def test_viewer_generate_cli_runs(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "Saved 3D motion viewer to" in result.output
     assert "Open in browser..." in result.output
-

@@ -19,7 +19,9 @@ from faceanalyze2.roi.indices import (
 )
 
 
-def _make_synthetic_artifacts(tmp_path: Path, *, stem: str = "sample", with_aligned: bool = True) -> Path:
+def _make_synthetic_artifacts(
+    tmp_path: Path, *, stem: str = "sample", with_aligned: bool = True
+) -> Path:
     artifact_dir = tmp_path / "artifacts" / stem
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
@@ -92,7 +94,9 @@ def _make_synthetic_artifacts(tmp_path: Path, *, stem: str = "sample", with_alig
     return artifact_dir
 
 
-def test_dynamic_analysis_big_smile_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dynamic_analysis_big_smile_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _make_synthetic_artifacts(tmp_path, stem="sample", with_aligned=True)
     monkeypatch.chdir(tmp_path)
 
@@ -117,7 +121,9 @@ def test_dynamic_analysis_big_smile_contract(tmp_path: Path, monkeypatch: pytest
         assert "score" in roi_metrics[roi_name]
 
 
-def test_dynamic_analysis_falls_back_to_landmarks_npz(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dynamic_analysis_falls_back_to_landmarks_npz(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _make_synthetic_artifacts(tmp_path, stem="sample", with_aligned=False)
     monkeypatch.chdir(tmp_path)
 
@@ -127,7 +133,9 @@ def test_dynamic_analysis_falls_back_to_landmarks_npz(tmp_path: Path, monkeypatc
     assert "eye" in payload["metrics"]["roi_metrics"]
 
 
-def test_dynamic_analysis_rejects_unsupported_motion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dynamic_analysis_rejects_unsupported_motion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _make_synthetic_artifacts(tmp_path, stem="sample", with_aligned=True)
     monkeypatch.chdir(tmp_path)
 

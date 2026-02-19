@@ -78,9 +78,9 @@ def _missing_aligned_message(path: Path, video_path: str | Path) -> str:
     return (
         f"Aligned landmarks file not found: {path}\n"
         "Run this pipeline first:\n"
-        f"faceanalyze2 landmarks extract --video \"{video_path}\"\n"
-        f"faceanalyze2 segment run --video \"{video_path}\" --task <smile|brow|eyeclose>\n"
-        f"faceanalyze2 align run --video \"{video_path}\""
+        f'faceanalyze2 landmarks extract --video "{video_path}"\n'
+        f'faceanalyze2 segment run --video "{video_path}" --task <smile|brow|eyeclose>\n'
+        f'faceanalyze2 align run --video "{video_path}"'
     )
 
 
@@ -88,7 +88,7 @@ def _missing_segment_message(path: Path, video_path: str | Path) -> str:
     return (
         f"Segment file not found: {path}\n"
         "Run this first: segment run.\n"
-        f"faceanalyze2 segment run --video \"{video_path}\" --task <smile|brow|eyeclose>"
+        f'faceanalyze2 segment run --video "{video_path}" --task <smile|brow|eyeclose>'
     )
 
 
@@ -115,7 +115,11 @@ def _load_aligned_arrays(aligned_path: Path) -> dict[str, np.ndarray]:
         raise ValueError(f"landmarks_xy_aligned must have shape (T, N, 2), got {aligned_xy.shape}")
 
     t_count = frame_indices.shape[0]
-    if timestamps_ms.shape[0] != t_count or presence.shape[0] != t_count or aligned_xy.shape[0] != t_count:
+    if (
+        timestamps_ms.shape[0] != t_count
+        or presence.shape[0] != t_count
+        or aligned_xy.shape[0] != t_count
+    ):
         raise ValueError("Aligned array lengths do not match frame count")
 
     return {
@@ -136,9 +140,13 @@ def _load_segment(segment_path: Path, frame_count: int) -> dict[str, Any]:
     neutral_idx = int(payload["neutral_idx"])
     peak_idx = int(payload["peak_idx"])
     if neutral_idx < 0 or neutral_idx >= frame_count:
-        raise ValueError(f"segment.json neutral_idx out of range: {neutral_idx} (frame_count={frame_count})")
+        raise ValueError(
+            f"segment.json neutral_idx out of range: {neutral_idx} (frame_count={frame_count})"
+        )
     if peak_idx < 0 or peak_idx >= frame_count:
-        raise ValueError(f"segment.json peak_idx out of range: {peak_idx} (frame_count={frame_count})")
+        raise ValueError(
+            f"segment.json peak_idx out of range: {peak_idx} (frame_count={frame_count})"
+        )
     return payload
 
 
@@ -256,7 +264,9 @@ def compute_roi_displacements(
             raise ValueError("Cannot normalize: neutral interocular points contain NaN")
         interocular_px = float(np.linalg.norm(point_a - point_b))
         if interocular_px <= EPSILON:
-            raise ValueError(f"Cannot normalize: interocular distance is too small ({interocular_px})")
+            raise ValueError(
+                f"Cannot normalize: interocular distance is too small ({interocular_px})"
+            )
         denom = interocular_px
 
     fps_value = float(fps) if (fps is not None and fps > 0) else None
@@ -484,8 +494,12 @@ def run_metrics(
         aligned_path=aligned_path,
         segment_path=segment_path,
     )
-    resolved_aligned = Path(aligned_path) if aligned_path is not None else artifact_dir / "landmarks_aligned.npz"
-    resolved_segment = Path(segment_path) if segment_path is not None else artifact_dir / "segment.json"
+    resolved_aligned = (
+        Path(aligned_path) if aligned_path is not None else artifact_dir / "landmarks_aligned.npz"
+    )
+    resolved_segment = (
+        Path(segment_path) if segment_path is not None else artifact_dir / "segment.json"
+    )
 
     if not resolved_aligned.exists():
         raise FileNotFoundError(_missing_aligned_message(resolved_aligned, video_path))
@@ -531,7 +545,9 @@ def run_metrics(
     _save_timeseries_csv(output_path=timeseries_path, roi_names=roi_names, result=result)
 
     metrics_csv_path = artifact_dir / "metrics.csv"
-    _save_metrics_csv(output_path=metrics_csv_path, roi_names=roi_names, result=result, task=task_name)
+    _save_metrics_csv(
+        output_path=metrics_csv_path, roi_names=roi_names, result=result, task=task_name
+    )
 
     metrics_json_payload = _build_metrics_json(
         task=task_name,

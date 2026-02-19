@@ -7,7 +7,11 @@ from typing import Any
 
 import numpy as np
 
-from faceanalyze2.analysis.segmentation import DEFAULT_ARTIFACT_ROOT, LoadedLandmarks, load_landmark_artifacts
+from faceanalyze2.analysis.segmentation import (
+    DEFAULT_ARTIFACT_ROOT,
+    LoadedLandmarks,
+    load_landmark_artifacts,
+)
 
 STABLE_IDXS = [33, 133, 263, 362]
 LANDMARK_COUNT = 478
@@ -21,7 +25,9 @@ class SegmentInfo:
     payload: dict[str, Any]
 
 
-def estimate_similarity_transform(src_pts: np.ndarray, dst_pts: np.ndarray) -> tuple[float, np.ndarray, np.ndarray]:
+def estimate_similarity_transform(
+    src_pts: np.ndarray, dst_pts: np.ndarray
+) -> tuple[float, np.ndarray, np.ndarray]:
     src = np.asarray(src_pts, dtype=np.float64)
     dst = np.asarray(dst_pts, dtype=np.float64)
     if src.ndim != 2 or dst.ndim != 2 or src.shape[1] != 2 or dst.shape[1] != 2:
@@ -68,7 +74,7 @@ def _resolve_segment_path(
 def _missing_segment_message(segment_path: Path, video_path: str | Path) -> str:
     return (
         f"Segment file not found: {segment_path}\n"
-        f"Run this first:\nfaceanalyze2 segment run --video \"{video_path}\" --task <smile|brow|eyeclose>"
+        f'Run this first:\nfaceanalyze2 segment run --video "{video_path}" --task <smile|brow|eyeclose>'
     )
 
 
@@ -79,7 +85,9 @@ def load_segment_info(
     segment_path: str | Path | None = None,
     frame_count: int,
 ) -> SegmentInfo:
-    resolved = _resolve_segment_path(video_path=video_path, segment_path=segment_path, artifact_dir=artifact_dir)
+    resolved = _resolve_segment_path(
+        video_path=video_path, segment_path=segment_path, artifact_dir=artifact_dir
+    )
     if not resolved.exists():
         raise FileNotFoundError(_missing_segment_message(resolved, video_path))
 
@@ -159,8 +167,12 @@ def _build_alignment_json(
             "scale_outlier_ratio": (
                 float(scale_outlier_frames / transformed_frames) if transformed_frames > 0 else None
             ),
-            "scale_outlier_frame_indices": loaded.frame_indices[scale_outlier_mask].astype(int).tolist(),
-            "invalid_stable_frame_indices": loaded.frame_indices[invalid_stable_mask].astype(int).tolist(),
+            "scale_outlier_frame_indices": loaded.frame_indices[scale_outlier_mask]
+            .astype(int)
+            .tolist(),
+            "invalid_stable_frame_indices": loaded.frame_indices[invalid_stable_mask]
+            .astype(int)
+            .tolist(),
         },
     }
 

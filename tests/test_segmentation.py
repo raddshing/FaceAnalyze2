@@ -66,7 +66,9 @@ def test_load_landmarks_validates_shape(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ValueError) as exc_info:
-        load_landmark_artifacts(video_path=tmp_path / "sample.mp4", artifact_root=tmp_path / "artifacts")
+        load_landmark_artifacts(
+            video_path=tmp_path / "sample.mp4", artifact_root=tmp_path / "artifacts"
+        )
 
     assert "landmarks_xyz must have shape" in str(exc_info.value)
 
