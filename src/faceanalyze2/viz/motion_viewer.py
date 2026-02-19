@@ -30,6 +30,8 @@ DEFAULT_Z_SCALE = 1.6
 DEFAULT_CONE_INTEROCULAR_SCALE = 0.03
 MIN_CONE_LENGTH_PX = 6.0
 MAX_CONE_LENGTH_PX = 12.0
+MAX_2D_FRAMES = 120
+FRAME_JPEG_QUALITY = 80
 
 REGION_SEEDS: list[tuple[str, list[int]]] = [
     ("left_eye", REGION_LEFT_EYE),
@@ -508,6 +510,128 @@ def _build_uv_coords_from_normalized_xy(normalized_xy: np.ndarray) -> list[list[
     return uv.astype(np.float32).tolist()
 
 
+def _safe_norm_xy_for_payload(row_norm_xy: np.ndarray, *, row_presence: bool) -> list[list[float]]:
+    if not row_presence:
+        return [[0.0, 0.0] for _ in range(LANDMARK_COUNT)]
+    xy = np.asarray(row_norm_xy, dtype=np.float32)
+    if xy.shape != (LANDMARK_COUNT, 2):
+        raise ValueError(f"row_norm_xy must have shape ({LANDMARK_COUNT}, 2), got {xy.shape}")
+    out = np.zeros((LANDMARK_COUNT, 2), dtype=np.float32)
+    valid = np.isfinite(xy).all(axis=1)
+    out[valid] = xy[valid]
+    return out.astype(np.float32).tolist()
+
+
+def _segment_row_indices(
+    *,
+    neutral_idx: int,
+    peak_idx: int,
+    max_frames: int = MAX_2D_FRAMES,
+) -> np.ndarray:
+    step = 1 if peak_idx >= neutral_idx else -1
+    rows = np.arange(neutral_idx, peak_idx + step, step, dtype=np.int64)
+    if rows.size <= max_frames:
+        return rows
+    sample_positions = np.linspace(0, rows.size - 1, num=max_frames)
+    sample_positions = np.round(sample_positions).astype(np.int64)
+    sample_positions = np.clip(sample_positions, 0, rows.size - 1)
+    dedup_positions = np.unique(sample_positions)
+    sampled_rows = rows[dedup_positions]
+    if sampled_rows[0] != neutral_idx:
+        sampled_rows[0] = neutral_idx
+    if sampled_rows[-1] != peak_idx:
+        sampled_rows[-1] = peak_idx
+    return sampled_rows
+
+
+def _build_all_norm_xy_payload(
+    *,
+    landmarks_xyz: np.ndarray,
+    presence: np.ndarray,
+    row_indices: np.ndarray,
+) -> list[list[list[float]]]:
+    output: list[list[list[float]]] = []
+    for row_idx in row_indices.astype(np.int64).tolist():
+        row_xy = np.asarray(landmarks_xyz[row_idx, :, :2], dtype=np.float32)
+        output.append(
+            _safe_norm_xy_for_payload(
+                row_xy,
+                row_presence=bool(presence[row_idx]),
+            )
+        )
+    return output
+
+
+def _encode_bgr_to_jpeg_base64(
+    frame_bgr: np.ndarray,
+    *,
+    quality: int = FRAME_JPEG_QUALITY,
+) -> str | None:
+    try:
+        import cv2
+    except Exception:
+        return None
+    ok, encoded = cv2.imencode(
+        ".jpg",
+        frame_bgr,
+        [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)],
+    )
+    if not ok:
+        return None
+    return base64.b64encode(encoded.tobytes()).decode("ascii")
+
+
+def _black_frame_base64(width: int, height: int) -> str | None:
+    safe_w = max(1, int(width))
+    safe_h = max(1, int(height))
+    black = np.zeros((safe_h, safe_w, 3), dtype=np.uint8)
+    return _encode_bgr_to_jpeg_base64(black)
+
+
+def _extract_video_frames_base64(
+    *,
+    video_path: str | Path,
+    frame_indices: np.ndarray,
+    width: int,
+    height: int,
+) -> list[str] | None:
+    video = Path(video_path)
+    if (not video.exists()) or (not video.is_file()):
+        return None
+
+    try:
+        import cv2
+    except Exception:
+        return None
+
+    capture = cv2.VideoCapture(str(video))
+    if not capture.isOpened():
+        capture.release()
+        return None
+
+    black_fallback = _black_frame_base64(width, height)
+    frame_images: list[str] = []
+    last_success: str | None = None
+
+    try:
+        for frame_idx in frame_indices.astype(np.int64).tolist():
+            frame_base64: str | None = None
+            if frame_idx >= 0 and capture.set(cv2.CAP_PROP_POS_FRAMES, float(frame_idx)):
+                ok, frame_bgr = capture.read()
+                if ok and frame_bgr is not None:
+                    frame_base64 = _encode_bgr_to_jpeg_base64(frame_bgr, quality=FRAME_JPEG_QUALITY)
+            if frame_base64 is None:
+                frame_base64 = last_success if last_success is not None else black_fallback
+            if frame_base64 is None:
+                return None
+            frame_images.append(frame_base64)
+            last_success = frame_base64
+    finally:
+        capture.release()
+
+    return frame_images
+
+
 def _extract_neutral_frame_base64(video_path: str | Path, frame_idx: int) -> str | None:
     video = Path(video_path)
     if not video.exists() or not video.is_file():
@@ -742,6 +866,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
     .meta{border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;line-height:1.45;color:var(--muted)}
     .legend{height:8px;border-radius:6px;background:linear-gradient(90deg,#2ecc71 0%,#f1c40f 50%,#e74c3c 100%);border:1px solid var(--line)}
     .tt{position:absolute;display:none;pointer-events:none;z-index:10;background:rgba(7,10,20,.94);border:1px solid #334567;border-radius:8px;padding:6px 8px;font-size:12px}
+    .muted{font-size:12px;color:var(--muted)}
     @media (max-width:980px){.app{grid-template-columns:1fr;grid-template-rows:auto 1fr}.panel{border-right:none;border-bottom:1px solid var(--line);max-height:45vh}}
   </style>
 </head>
@@ -755,11 +880,11 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
   <script type="text/babel">
     const data = window.MOTION_VIEWER_DATA;
     class SimpleOrbitControls{
-      constructor(camera,dom){this.camera=camera;this.dom=dom;this.target=new THREE.Vector3(0,0,0);this.state="none";this.sph=new THREE.Spherical();const off=new THREE.Vector3().copy(camera.position).sub(this.target);this.sph.setFromVector3(off);this.lastX=0;this.lastY=0;this.onDown=this.onDown.bind(this);this.onMove=this.onMove.bind(this);this.onUp=this.onUp.bind(this);this.onWheel=this.onWheel.bind(this);this.onCtx=e=>e.preventDefault();dom.addEventListener("mousedown",this.onDown);window.addEventListener("mousemove",this.onMove);window.addEventListener("mouseup",this.onUp);dom.addEventListener("wheel",this.onWheel,{passive:false});dom.addEventListener("contextmenu",this.onCtx)}
-      onDown(e){this.lastX=e.clientX;this.lastY=e.clientY;this.state=e.button===2?"pan":"rotate"}
-      onMove(e){if(this.state==="none")return;const dx=e.clientX-this.lastX;const dy=e.clientY-this.lastY;this.lastX=e.clientX;this.lastY=e.clientY;if(this.state==="rotate"){this.sph.theta-=dx*0.005;this.sph.phi-=dy*0.005;this.sph.phi=Math.max(0.001,Math.min(Math.PI-0.001,this.sph.phi));return}const rect=this.dom.getBoundingClientRect();const d=this.camera.position.distanceTo(this.target);const f=this.camera.fov*Math.PI/180;const sc=2*Math.tan(f/2)*d;const panX=(-dx/Math.max(rect.width,1))*sc;const panY=(dy/Math.max(rect.height,1))*sc;const fw=new THREE.Vector3();this.camera.getWorldDirection(fw);const right=new THREE.Vector3().crossVectors(fw,this.camera.up).normalize();const up=new THREE.Vector3().copy(this.camera.up).normalize();const pan=new THREE.Vector3();pan.addScaledVector(right,panX);pan.addScaledVector(up,panY);this.target.add(pan);this.camera.position.add(pan)}
+      constructor(camera,dom){this.camera=camera;this.dom=dom;this.target=new THREE.Vector3(0,0,0);this.state="none";this.enabled=true;this.enableRotate=true;this.enablePan=true;this.enableZoom=true;this.sph=new THREE.Spherical();const off=new THREE.Vector3().copy(camera.position).sub(this.target);this.sph.setFromVector3(off);this.lastX=0;this.lastY=0;this.onDown=this.onDown.bind(this);this.onMove=this.onMove.bind(this);this.onUp=this.onUp.bind(this);this.onWheel=this.onWheel.bind(this);this.onCtx=e=>e.preventDefault();dom.addEventListener("mousedown",this.onDown);window.addEventListener("mousemove",this.onMove);window.addEventListener("mouseup",this.onUp);dom.addEventListener("wheel",this.onWheel,{passive:false});dom.addEventListener("contextmenu",this.onCtx)}
+      onDown(e){if(!this.enabled)return;this.lastX=e.clientX;this.lastY=e.clientY;if(e.button===2){this.state=this.enablePan?"pan":"none";return}this.state=this.enableRotate?"rotate":"none"}
+      onMove(e){if(!this.enabled||this.state==="none")return;const dx=e.clientX-this.lastX;const dy=e.clientY-this.lastY;this.lastX=e.clientX;this.lastY=e.clientY;if(this.state==="rotate"){this.sph.theta-=dx*0.005;this.sph.phi-=dy*0.005;this.sph.phi=Math.max(0.001,Math.min(Math.PI-0.001,this.sph.phi));return}const rect=this.dom.getBoundingClientRect();let sc;if(this.camera.isPerspectiveCamera){const d=this.camera.position.distanceTo(this.target);const f=this.camera.fov*Math.PI/180;sc=2*Math.tan(f/2)*d;}else{sc=(this.camera.right-this.camera.left);}const panX=(-dx/Math.max(rect.width,1))*sc;const panY=(dy/Math.max(rect.height,1))*sc;const fw=new THREE.Vector3();this.camera.getWorldDirection(fw);const right=new THREE.Vector3().crossVectors(fw,this.camera.up).normalize();const up=new THREE.Vector3().copy(this.camera.up).normalize();const pan=new THREE.Vector3();pan.addScaledVector(right,panX);pan.addScaledVector(up,panY);this.target.add(pan);this.camera.position.add(pan)}
       onUp(){this.state="none"}
-      onWheel(e){e.preventDefault();const sign=Math.sign(e.deltaY);this.sph.radius=Math.max(5,this.sph.radius*(1+sign*0.1))}
+      onWheel(e){if(!this.enabled||!this.enableZoom)return;e.preventDefault();const sign=Math.sign(e.deltaY);if(this.camera.isPerspectiveCamera){this.sph.radius=Math.max(5,this.sph.radius*(1+sign*0.1));return}const factor=1+sign*0.1;this.camera.left*=factor;this.camera.right*=factor;this.camera.top*=factor;this.camera.bottom*=factor;this.camera.updateProjectionMatrix();}
       update(){const off=new THREE.Vector3().setFromSpherical(this.sph);this.camera.position.copy(this.target).add(off);this.camera.lookAt(this.target)}
       dispose(){this.dom.removeEventListener("mousedown",this.onDown);window.removeEventListener("mousemove",this.onMove);window.removeEventListener("mouseup",this.onUp);this.dom.removeEventListener("wheel",this.onWheel);this.dom.removeEventListener("contextmenu",this.onCtx)}
     }
@@ -767,21 +892,38 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
     const colorFromValue=v=>{const t=clamp01(v);const r=t,g=1-t,b=.12;return{r,g,b,hex:(Math.round(r*255)<<16)|(Math.round(g*255)<<8)|Math.round(b*255)}};
     const friendlyRegion=name=>name.replaceAll("_"," ");
     function App(){
-      const mountRef=React.useRef(null),tipRef=React.useRef(null),viewerRef=React.useRef(null);
+      const mountRef=React.useRef(null),canvas2dRef=React.useRef(null),tipRef=React.useRef(null),viewerRef=React.useRef(null);
+      const images2dRef=React.useRef([]);
+      const twoDRef=React.useRef({points:[],mag:[]});
       const hasTexture=Boolean(data.neutral_image_base64)&&Array.isArray(data.uv_coords)&&data.uv_coords.length===data.base_xyz.length&&Array.isArray(data.faces)&&data.faces.length>0;
+      const has2d=Array.isArray(data.frame_images)&&Array.isArray(data.all_norm_xy)&&data.frame_images.length>0&&data.all_norm_xy.length===data.frame_images.length;
       const initialRegions=React.useMemo(()=>{const m={};data.region_names.forEach(n=>{m[n]=true});return m},[]);
       const [t,setT]=React.useState(1.0);
       const [showWire,setShowWire]=React.useState(true);
       const [showCones,setShowCones]=React.useState(true);
       const [normalizeMode,setNormalizeMode]=React.useState(data.params.normalize_default||"region");
-      const [renderMode,setRenderMode]=React.useState(hasTexture?"texture":"points");
+      const [renderMode,setRenderMode]=React.useState(has2d?"2d":"points");
       const [showTextureOverlay,setShowTextureOverlay]=React.useState(true);
+      const [showBackground2d,setShowBackground2d]=React.useState(true);
       const [coneScale,setConeScale]=React.useState(1.0);
       const [pointSize,setPointSize]=React.useState(2.8);
       const [regionEnabled,setRegionEnabled]=React.useState(initialRegions);
-      const settingsRef=React.useRef({t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,coneScale,pointSize,regionEnabled});
-      React.useEffect(()=>{if(!hasTexture&&renderMode!=="points"){setRenderMode("points")}},[hasTexture,renderMode]);
-      React.useEffect(()=>{settingsRef.current={t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,coneScale,pointSize,regionEnabled};if(viewerRef.current?.updateScene)viewerRef.current.updateScene()},[t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,coneScale,pointSize,regionEnabled]);
+      const [images2dReady,setImages2dReady]=React.useState(false);
+      const settingsRef=React.useRef({t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,regionEnabled});
+      React.useEffect(()=>{if(!has2d&&renderMode==="2d"){setRenderMode("points")}},[has2d,renderMode]);
+      React.useEffect(()=>{if(!hasTexture&&renderMode==="texture"){setRenderMode(has2d?"2d":"points")}},[hasTexture,has2d,renderMode]);
+      React.useEffect(()=>{settingsRef.current={t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,regionEnabled};if(viewerRef.current?.updateScene)viewerRef.current.updateScene()},[t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,regionEnabled]);
+      React.useEffect(()=>{
+        if(!has2d){images2dRef.current=[];setImages2dReady(false);return;}
+        let cancelled=false;
+        const frames=data.frame_images||[];
+        Promise.all(frames.map((b64)=>new Promise((resolve)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>resolve(null);img.src=`data:image/jpeg;base64,${b64}`;}))).then((images)=>{
+          if(cancelled)return;
+          images2dRef.current=images;
+          setImages2dReady(true);
+        });
+        return()=>{cancelled=true;};
+      },[has2d]);
       React.useEffect(()=>{
         if(!mountRef.current)return;
         const container=mountRef.current;
@@ -792,33 +934,95 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
 
         const scene=new THREE.Scene();
         scene.background=new THREE.Color(0x0b1020);
-        const camera=new THREE.PerspectiveCamera(42,container.clientWidth/Math.max(container.clientHeight,1),0.1,10000);
+        const perspectiveCamera=new THREE.PerspectiveCamera(42,container.clientWidth/Math.max(container.clientHeight,1),0.1,10000);
+        const orthoCamera=new THREE.OrthographicCamera(-320,320,240,-240,-5000,5000);
         const radius=Math.max(data.radius_hint||400,200);
-        camera.position.set(radius*.8,radius*.45,radius*1.1);
-        const controls=new SimpleOrbitControls(camera,renderer.domElement);
-        controls.target.set(0,0,0);
-        controls.update();
+        perspectiveCamera.position.set(radius*.8,radius*.45,radius*1.1);
+        const controlsPerspective=new SimpleOrbitControls(perspectiveCamera,renderer.domElement);
+        controlsPerspective.target.set(0,0,0);
+        controlsPerspective.update();
+        orthoCamera.position.set(0,0,1000);
+        const controlsOrtho=new SimpleOrbitControls(orthoCamera,renderer.domElement);
+        controlsOrtho.target.set(0,0,0);
+        controlsOrtho.enableRotate=false;
+        controlsOrtho.update();
 
         scene.add(new THREE.HemisphereLight(0xffffff,0x233554,.78));
         const dl=new THREE.DirectionalLight(0xffffff,.56);
         dl.position.set(1,1,1);
         scene.add(dl);
+        const setOverlayLayer=(root,order)=>{
+          if(!root){return;}
+          root.renderOrder=order;
+          root.traverse((node)=>{
+            node.renderOrder=order;
+            const mats=Array.isArray(node.material)?node.material:[node.material];
+            for(let mi=0;mi<mats.length;mi+=1){
+              const mat=mats[mi];
+              if(!mat){continue;}
+              mat.depthTest=false;
+              mat.depthWrite=false;
+              mat.transparent=true;
+              mat.needsUpdate=true;
+            }
+          });
+        };
 
         const base=data.base_xyz,disp=data.disp_xyz,dirs=data.unit_dir_xyz,magRegion=data.mag_region_norm,magGlobal=data.mag_global_norm,regionIds=data.region_ids,regionNames=data.region_names,edges=data.edges,pointCount=base.length;
+        const baseNorm=data.base_norm_xy||[];
+        const peakNorm=data.peak_norm_xy||[];
+        let frameW=1024;
+        let frameH=1024;
+        const quantile95=(arr)=>{const vals=arr.filter(v=>Number.isFinite(v));if(!vals.length)return 1.0;vals.sort((a,b)=>a-b);const p=Math.min(vals.length-1,Math.max(0,Math.floor(0.95*(vals.length-1))));const q=vals[p];if(q>1e-6)return q;const mx=Math.max(...vals);return mx>1e-6?mx:1.0;};
+        const compute2dMagnitudes=(w,h)=>{
+          const raw=new Array(pointCount).fill(0);
+          for(let i=0;i<pointCount;i+=1){
+            const b=baseNorm[i]||[0,0],p=peakNorm[i]||[0,0];
+            const dx=(p[0]-b[0])*w,dy=(p[1]-b[1])*h;
+            const m=Math.sqrt(dx*dx+dy*dy);
+            raw[i]=Number.isFinite(m)?m:0;
+          }
+          const gScale=quantile95(raw);
+          const global=raw.map(v=>Math.max(0,Math.min(1,v/gScale)));
+          const regionScale=new Array(regionNames.length).fill(gScale);
+          const region=new Array(pointCount).fill(0);
+          for(let r=0;r<regionNames.length;r+=1){
+            const vals=[];for(let i=0;i<pointCount;i+=1){if(regionIds[i]===r&&Number.isFinite(raw[i]))vals.push(raw[i]);}
+            const rs=quantile95(vals);regionScale[r]=rs;
+            for(let i=0;i<pointCount;i+=1){if(regionIds[i]===r){region[i]=Math.max(0,Math.min(1,raw[i]/rs));}}
+          }
+          return {raw,global,region,regionScale};
+        };
+        let mag2d=compute2dMagnitudes(frameW,frameH);
         const pointsGeom=new THREE.BufferGeometry();
         const pointsMat=new THREE.PointsMaterial({size:2.8,vertexColors:true,transparent:true,opacity:.96,depthWrite:false});
         const pointsMesh=new THREE.Points(pointsGeom,pointsMat);
+        setOverlayLayer(pointsMesh,20);
         scene.add(pointsMesh);
 
         const wireGeom=new THREE.BufferGeometry();
         const wireMat=new THREE.LineBasicMaterial({color:0x9ba7c6,transparent:true,opacity:.35});
         const wireMesh=new THREE.LineSegments(wireGeom,wireMat);
+        setOverlayLayer(wireMesh,10);
         scene.add(wireMesh);
 
         const arrows=new THREE.Group();
+        arrows.renderOrder=30;
         scene.add(arrows);
 
-        let textureMesh=null,overlayMesh=null,textureGeometry=null,texturePositionAttr=null,overlayColorAttr=null;
+        const updateOrthoFrustum=()=>{
+          const aspect=Math.max(container.clientWidth,1)/Math.max(container.clientHeight,1);
+          const halfW=frameW*0.55;
+          const halfH=frameH*0.55;
+          if(aspect>=1){
+            orthoCamera.left=-halfW*aspect;orthoCamera.right=halfW*aspect;orthoCamera.top=halfH;orthoCamera.bottom=-halfH;
+          }else{
+            orthoCamera.left=-halfW;orthoCamera.right=halfW;orthoCamera.top=halfH/aspect;orthoCamera.bottom=-halfH/aspect;
+          }
+          orthoCamera.updateProjectionMatrix();
+        };
+
+        let textureMesh=null,overlayMesh=null,textureGeometry=null,texturePositionAttr=null,overlayColorAttr=null,bgPlane=null,bgPlaneMat=null;
         if(hasTexture){
           const uvFlat=[];for(let i=0;i<data.uv_coords.length;i+=1){uvFlat.push(data.uv_coords[i][0],data.uv_coords[i][1]);}
           const idxFlat=[];for(let i=0;i<data.faces.length;i+=1){idxFlat.push(data.faces[i][0],data.faces[i][1],data.faces[i][2]);}
@@ -829,16 +1033,30 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
           textureGeometry.setAttribute("uv",new THREE.Float32BufferAttribute(uvFlat,2));
           textureGeometry.setAttribute("color",overlayColorAttr);
           textureGeometry.setIndex(idxFlat);
-          const tex=new THREE.TextureLoader().load(`data:image/png;base64,${data.neutral_image_base64}`);
+          const tex=new THREE.TextureLoader().load(`data:image/png;base64,${data.neutral_image_base64}`,()=>{if(tex.image){frameW=tex.image.width||frameW;frameH=tex.image.height||frameH;mag2d=compute2dMagnitudes(frameW,frameH);updateOrthoFrustum();if(viewerRef.current?.updateScene)viewerRef.current.updateScene();}});
           tex.minFilter=THREE.LinearFilter;tex.magFilter=THREE.LinearFilter;
-          const textureMat=new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide});
+          const textureMat=new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide,transparent:true,opacity:1.0});
           const overlayMat=new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:.4,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
           textureMesh=new THREE.Mesh(textureGeometry,textureMat);
           overlayMesh=new THREE.Mesh(textureGeometry,overlayMat);
+          textureMesh.renderOrder=0;
+          if(textureMesh.material){
+            textureMesh.material.polygonOffset=true;
+            textureMesh.material.polygonOffsetFactor=1;
+            textureMesh.material.polygonOffsetUnits=1;
+          }
+          setOverlayLayer(overlayMesh,5);
           textureMesh.visible=false;overlayMesh.visible=false;
+          bgPlaneMat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:1.0,depthWrite:false,side:THREE.DoubleSide});
+          bgPlane=new THREE.Mesh(new THREE.PlaneGeometry(1,1),bgPlaneMat);
+          bgPlane.position.set(0,0,-2);
+          bgPlane.visible=false;
+          scene.add(bgPlane);
           scene.add(textureMesh);scene.add(overlayMesh);
         }
+        updateOrthoFrustum();
 
+        const activeCamera=()=>perspectiveCamera;
         const ray=new THREE.Raycaster();
         ray.params.Points.threshold=6;
         const mouse=new THREE.Vector2();
@@ -852,11 +1070,21 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
           const s=settingsRef.current;
           const coords=new Array(pointCount);
           const visible=new Array(pointCount).fill(false);
-          const mag=s.normalizeMode==="region"?magRegion:magGlobal;
+          const use2d=false;
+          const mag=use2d?(s.normalizeMode==="region"?mag2d.region:mag2d.global):(s.normalizeMode==="region"?magRegion:magGlobal);
           currentCoords=coords;currentMag=mag;
 
           for(let i=0;i<pointCount;i+=1){
-            const p=currentPoint(i,s.t);coords[i]=p;
+            let p;
+            if(use2d){
+              const b=baseNorm[i]||[0,0],pk=peakNorm[i]||[0,0];
+              const nx=((1.0-s.t)*b[0])+(s.t*pk[0]);
+              const ny=((1.0-s.t)*b[1])+(s.t*pk[1]);
+              p=[(nx-0.5)*frameW,(0.5-ny)*frameH,0.0];
+            }else{
+              p=currentPoint(i,s.t);
+            }
+            coords[i]=p;
             const finite=Number.isFinite(p[0])&&Number.isFinite(p[1])&&Number.isFinite(p[2]);
             if(!finite)continue;
             visible[i]=!!s.regionEnabled[regionNames[regionIds[i]]];
@@ -872,30 +1100,38 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
           pointsGeom.setAttribute("color",new THREE.Float32BufferAttribute(col,3));
           pointsGeom.computeBoundingSphere();
           pointsMat.size=s.pointSize;
-          pointsMesh.visible=s.renderMode==="points";
+          pointsMesh.visible=(s.renderMode==="points"||s.renderMode==="texture");
 
           const wPos=[];
           if(s.showWire){for(let i=0;i<edges.length;i+=1){const a=edges[i][0],b=edges[i][1];if(!visible[a]||!visible[b])continue;const pa=coords[a],pb=coords[b];wPos.push(pa[0],pa[1],pa[2],pb[0],pb[1],pb[2]);}}
           wireGeom.setAttribute("position",new THREE.Float32BufferAttribute(wPos,3));
           wireGeom.computeBoundingSphere();
-          wireMesh.visible=s.showWire;
+          wireMesh.visible=s.showWire&&(s.renderMode==="points"||s.renderMode==="texture");
 
           clearArrows();
           if(s.showCones&&s.t>0){
             const len=data.cone_length_px*s.coneScale*s.t;
             for(let i=0;i<pointCount;i+=1){
               if(!visible[i])continue;
-              const u=dirs[i];
+              let u=dirs[i];
+              if(use2d){
+                const b=baseNorm[i]||[0,0],pk=peakNorm[i]||[0,0];
+                const dx=(pk[0]-b[0])*frameW;
+                const dy=(b[1]-pk[1])*frameH;
+                u=[dx,dy,0.0];
+              }
               if(!Number.isFinite(u[0])||!Number.isFinite(u[1])||!Number.isFinite(u[2]))continue;
               const magU=Math.sqrt(u[0]*u[0]+u[1]*u[1]+u[2]*u[2]);
               if(magU<1e-6)continue;
               const d=new THREE.Vector3(u[0],u[1],u[2]).normalize();
               const o=coords[i];
               const color=colorFromValue(s.t*mag[i]).hex;
-              arrows.add(new THREE.ArrowHelper(d,new THREE.Vector3(o[0],o[1],o[2]),len,color,Math.max(len*.35,1.1),Math.max(len*.2,.75)));
+              const arrow=new THREE.ArrowHelper(d,new THREE.Vector3(o[0],o[1],o[2]),len,color,Math.max(len*.35,1.1),Math.max(len*.2,.75));
+              setOverlayLayer(arrow,30);
+              arrows.add(arrow);
             }
           }
-          arrows.visible=s.showCones;
+          arrows.visible=s.showCones&&(s.renderMode==="points"||s.renderMode==="texture");
 
           if(hasTexture&&texturePositionAttr&&overlayColorAttr&&textureMesh&&overlayMesh){
             for(let i=0;i<pointCount;i+=1){
@@ -910,16 +1146,21 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
             textureGeometry.computeBoundingSphere();
             textureMesh.visible=s.renderMode==="texture";
             overlayMesh.visible=s.renderMode==="texture"&&s.showTextureOverlay;
+            if(textureMesh.material){textureMesh.material.opacity=1.0;}
+            if(bgPlane&&bgPlaneMat){
+              bgPlane.visible=false;
+              bgPlane.scale.set(frameW,frameH,1);
+            }
           }
         };
 
         const hideTip=()=>{if(tipRef.current)tipRef.current.style.display="none"};
-        const showTip=(event,idx)=>{if(!tipRef.current)return;const rect=renderer.domElement.getBoundingClientRect();tipRef.current.style.display="block";tipRef.current.style.left=`${event.clientX-rect.left+14}px`;tipRef.current.style.top=`${event.clientY-rect.top+14}px`;const s=settingsRef.current;const mag=s.normalizeMode==="region"?magRegion:magGlobal;tipRef.current.innerHTML=`<b>Landmark #${idx}</b><br/>Region: ${friendlyRegion(regionNames[regionIds[idx]])}<br/>Norm mag: ${(s.t*mag[idx]).toFixed(3)}`};
+        const showTip=(event,idx)=>{if(!tipRef.current)return;const rect=renderer.domElement.getBoundingClientRect();tipRef.current.style.display="block";tipRef.current.style.left=`${event.clientX-rect.left+14}px`;tipRef.current.style.top=`${event.clientY-rect.top+14}px`;tipRef.current.innerHTML=`<b>Landmark #${idx}</b><br/>Region: ${friendlyRegion(regionNames[regionIds[idx]])}<br/>Norm mag: ${(settingsRef.current.t*currentMag[idx]).toFixed(3)}`};
         const onMove=e=>{
           const rect=renderer.domElement.getBoundingClientRect();
           mouse.x=((e.clientX-rect.left)/Math.max(rect.width,1))*2-1;
           mouse.y=-((e.clientY-rect.top)/Math.max(rect.height,1))*2+1;
-          ray.setFromCamera(mouse,camera);
+          ray.setFromCamera(mouse,activeCamera());
           const s=settingsRef.current;
           if(s.renderMode==="texture"&&hasTexture&&textureMesh){
             const hits=ray.intersectObject(textureMesh);
@@ -936,18 +1177,212 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
           showTip(e,lIdx);
         };
 
-        const onResize=()=>{const w=container.clientWidth,h=container.clientHeight;renderer.setSize(w,h);camera.aspect=w/Math.max(h,1);camera.updateProjectionMatrix()};
+        const onResize=()=>{const w=container.clientWidth,h=container.clientHeight;renderer.setSize(w,h);perspectiveCamera.aspect=w/Math.max(h,1);perspectiveCamera.updateProjectionMatrix();updateOrthoFrustum()};
         renderer.domElement.addEventListener("mousemove",onMove);
         renderer.domElement.addEventListener("mouseleave",hideTip);
         window.addEventListener("resize",onResize);
 
         let raf=0;
-        const loop=()=>{controls.update();renderer.render(scene,camera);raf=requestAnimationFrame(loop)};
-        viewerRef.current={updateScene,exportPng:()=>{renderer.render(scene,camera);const url=renderer.domElement.toDataURL("image/png");const a=document.createElement("a");a.href=url;a.download="motion_viewer.png";a.click()}};
+        const loop=()=>{
+          const is2d=settingsRef.current.renderMode==="2d";
+          controlsPerspective.enabled=!is2d;
+          controlsOrtho.enabled=false;
+          controlsPerspective.update();
+          if(!is2d){renderer.render(scene,activeCamera());}
+          raf=requestAnimationFrame(loop);
+        };
+        viewerRef.current={updateScene,exportPng:()=>{
+          const is2d=settingsRef.current.renderMode==="2d";
+          if(is2d&&canvas2dRef.current){
+            const url=canvas2dRef.current.toDataURL("image/png");
+            const a=document.createElement("a");
+            a.href=url;
+            a.download="motion_viewer.png";
+            a.click();
+            return;
+          }
+          renderer.render(scene,activeCamera());
+          const url=renderer.domElement.toDataURL("image/png");
+          const a=document.createElement("a");
+          a.href=url;
+          a.download="motion_viewer.png";
+          a.click();
+        }};
         updateScene();
         loop();
-        return()=>{cancelAnimationFrame(raf);renderer.domElement.removeEventListener("mousemove",onMove);renderer.domElement.removeEventListener("mouseleave",hideTip);window.removeEventListener("resize",onResize);controls.dispose();renderer.dispose();if(container.contains(renderer.domElement))container.removeChild(renderer.domElement)};
+        return()=>{cancelAnimationFrame(raf);renderer.domElement.removeEventListener("mousemove",onMove);renderer.domElement.removeEventListener("mouseleave",hideTip);window.removeEventListener("resize",onResize);controlsPerspective.dispose();controlsOrtho.dispose();renderer.dispose();if(container.contains(renderer.domElement))container.removeChild(renderer.domElement)};
       },[]);
+      React.useEffect(()=>{
+        if(renderMode!=="2d"||!has2d||!images2dReady||!canvas2dRef.current){return;}
+        const canvas=canvas2dRef.current;
+        const ctx=canvas.getContext("2d");
+        if(!ctx){return;}
+
+        const frames=data.frame_images||[];
+        const xySeries=data.all_norm_xy||[];
+        const images=images2dRef.current||[];
+        const pointCount=(Array.isArray(data.base_xyz)?data.base_xyz.length:0);
+        const n=Math.min(frames.length,xySeries.length,images.length);
+        if(n<=0||pointCount<=0){return;}
+
+        const firstImage=images.find((img)=>img&&img.width>0&&img.height>0);
+        const width=firstImage?firstImage.width:640;
+        const height=firstImage?firstImage.height:480;
+        canvas.width=width;
+        canvas.height=height;
+
+        const regionIds=data.region_ids||[];
+        const regionNames=data.region_names||[];
+        const faces=data.faces||[];
+        const edges=data.edges||[];
+        const baseNorm=data.base_norm_xy||[];
+        const peakNorm=data.peak_norm_xy||[];
+        const isRegionEnabled=(landmarkIdx)=>{
+          if(landmarkIdx<0||landmarkIdx>=pointCount){return false;}
+          const regionIdx=regionIds[landmarkIdx];
+          if(regionIdx==null||regionIdx<0||regionIdx>=regionNames.length){return false;}
+          return !!regionEnabled[regionNames[regionIdx]];
+        };
+        const regionLabel=(landmarkIdx)=>{
+          const regionIdx=regionIds[landmarkIdx];
+          if(regionIdx==null||regionIdx<0||regionIdx>=regionNames.length){return "unknown";}
+          return friendlyRegion(regionNames[regionIdx]);
+        };
+
+        const frameIdx=Math.max(0,Math.min(n-1,Math.round(t*(n-1))));
+        const currentImage=images[frameIdx];
+        const normXY=xySeries[frameIdx];
+        const pointsPx=new Array(pointCount);
+        for(let i=0;i<pointCount;i+=1){
+          const p=normXY&&normXY[i]?normXY[i]:[0,0];
+          pointsPx[i]=[p[0]*width,p[1]*height];
+        }
+
+        const rawDisp2d=new Array(pointCount).fill(0);
+        for(let i=0;i<pointCount;i+=1){
+          const b=baseNorm[i]||[0,0];
+          const curr=normXY&&normXY[i]?normXY[i]:[0,0];
+          const dx=(curr[0]-b[0])*width;
+          const dy=(curr[1]-b[1])*height;
+          const m=Math.sqrt(dx*dx+dy*dy);
+          rawDisp2d[i]=Number.isFinite(m)?m:0;
+        }
+        const quantile95=(arr)=>{const vals=arr.filter(v=>Number.isFinite(v));if(!vals.length)return 1.0;vals.sort((a,b)=>a-b);const idx=Math.max(0,Math.min(vals.length-1,Math.floor(0.95*(vals.length-1))));const q=vals[idx];if(q>1e-6)return q;const mx=Math.max(...vals);return mx>1e-6?mx:1.0;};
+        const globalScale=quantile95(rawDisp2d);
+        const magGlobal=rawDisp2d.map(v=>Math.max(0,Math.min(1,v/globalScale)));
+        const magRegion=new Array(pointCount).fill(0);
+        for(let r=0;r<regionNames.length;r+=1){
+          const vals=[];for(let i=0;i<pointCount;i+=1){if(regionIds[i]===r){vals.push(rawDisp2d[i]);}}
+          const rScale=quantile95(vals);
+          for(let i=0;i<pointCount;i+=1){if(regionIds[i]===r){magRegion[i]=Math.max(0,Math.min(1,rawDisp2d[i]/rScale));}}
+        }
+        const magArray=(normalizeMode==="region")?magRegion:magGlobal;
+        twoDRef.current={points:pointsPx,mag:magArray};
+
+        if(showBackground2d&&currentImage&&currentImage.width>0){
+          ctx.drawImage(currentImage,0,0,width,height);
+        }else{
+          ctx.fillStyle="rgba(0,0,0,1)";
+          ctx.fillRect(0,0,width,height);
+        }
+
+        if(showTextureOverlay){
+          for(let fi=0;fi<faces.length;fi+=1){
+            const tri=faces[fi];const a=tri[0],b=tri[1],c=tri[2];
+            if(a<0||b<0||c<0||a>=pointCount||b>=pointCount||c>=pointCount){continue;}
+            if(!isRegionEnabled(a)||!isRegionEnabled(b)||!isRegionEnabled(c)){continue;}
+            const pa=pointsPx[a],pb=pointsPx[b],pc=pointsPx[c];
+            const m=(magArray[a]+magArray[b]+magArray[c])/3.0;
+            if(!(m>0.001)){continue;}
+            const color=colorFromValue(m);
+            ctx.fillStyle=`rgba(${Math.round(color.r*255)},${Math.round(color.g*255)},${Math.round(color.b*255)},0.35)`;
+            ctx.beginPath();
+            ctx.moveTo(pa[0],pa[1]);ctx.lineTo(pb[0],pb[1]);ctx.lineTo(pc[0],pc[1]);ctx.closePath();ctx.fill();
+          }
+        }
+
+        if(showWire){
+          ctx.strokeStyle="rgba(255,255,255,0.62)";
+          ctx.lineWidth=1.0;
+          for(let ei=0;ei<edges.length;ei+=1){
+            const e=edges[ei];const a=e[0],b=e[1];
+            if(a<0||b<0||a>=pointCount||b>=pointCount){continue;}
+            if(!isRegionEnabled(a)||!isRegionEnabled(b)){continue;}
+            const pa=pointsPx[a],pb=pointsPx[b];
+            ctx.beginPath();ctx.moveTo(pa[0],pa[1]);ctx.lineTo(pb[0],pb[1]);ctx.stroke();
+          }
+        }
+
+        const pointRadius=Math.max(0.5,pointSize);
+        for(let i=0;i<pointCount;i+=1){
+          if(!isRegionEnabled(i)){continue;}
+          const pxy=pointsPx[i];
+          const col=colorFromValue(magArray[i]);
+          ctx.fillStyle=`rgba(${Math.round(col.r*255)},${Math.round(col.g*255)},${Math.round(col.b*255)},0.95)`;
+          ctx.beginPath();
+          ctx.arc(pxy[0],pxy[1],pointRadius,0,Math.PI*2);
+          ctx.fill();
+        }
+
+        if(showCones){
+          const fullLen=Math.max(0,data.cone_length_px*coneScale);
+          const len=t*fullLen;
+          if(t>0.001&&len>=1){
+            const headLen=Math.max(3,Math.min(12,len*0.25));
+            const headWidth=headLen*0.6;
+            for(let i=0;i<pointCount;i+=1){
+              if(!isRegionEnabled(i)){continue;}
+              const b=baseNorm[i]||[0,0];const p=peakNorm[i]||[0,0];
+              const dx=(p[0]-b[0])*width;const dy=(p[1]-b[1])*height;
+              const norm=Math.sqrt(dx*dx+dy*dy);
+              if(!(norm>1e-6)){continue;}
+              const ux=dx/norm;const uy=dy/norm;
+              const sxy=pointsPx[i];
+              const ex=sxy[0]+ux*len;const ey=sxy[1]+uy*len;
+              const col=colorFromValue(magArray[i]);
+              ctx.strokeStyle=`rgba(${Math.round(col.r*255)},${Math.round(col.g*255)},${Math.round(col.b*255)},0.92)`;
+              ctx.fillStyle=ctx.strokeStyle;
+              ctx.lineWidth=1.25;
+              ctx.beginPath();ctx.moveTo(sxy[0],sxy[1]);ctx.lineTo(ex,ey);ctx.stroke();
+
+              const px=-uy;const py=ux;
+              const bx=ex-(ux*headLen);const by=ey-(uy*headLen);
+              const lx=bx+(px*headWidth*0.5);const ly=by+(py*headWidth*0.5);
+              const rx=bx-(px*headWidth*0.5);const ry=by-(py*headWidth*0.5);
+              ctx.beginPath();
+              ctx.moveTo(ex,ey);
+              ctx.lineTo(lx,ly);
+              ctx.lineTo(rx,ry);
+              ctx.closePath();
+              ctx.fill();
+            }
+          }
+        }
+
+        const hideTip=()=>{if(tipRef.current){tipRef.current.style.display="none";}};
+        const onMove=(event)=>{
+          const rect=canvas.getBoundingClientRect();
+          const x=(event.clientX-rect.left)*(canvas.width/Math.max(rect.width,1));
+          const y=(event.clientY-rect.top)*(canvas.height/Math.max(rect.height,1));
+          let best=-1;let bestDist=Number.POSITIVE_INFINITY;
+          for(let i=0;i<pointCount;i+=1){
+            if(!isRegionEnabled(i)){continue;}
+            const p=twoDRef.current.points[i];if(!p){continue;}
+            const dx=p[0]-x,dy=p[1]-y;const d=Math.sqrt(dx*dx+dy*dy);
+            if(d<bestDist){bestDist=d;best=i;}
+          }
+          if(best<0||bestDist>20){hideTip();return;}
+          if(!tipRef.current){return;}
+          tipRef.current.style.display="block";
+          tipRef.current.style.left=`${event.clientX-rect.left+14}px`;
+          tipRef.current.style.top=`${event.clientY-rect.top+14}px`;
+          const magVal=twoDRef.current.mag[best]||0;
+          tipRef.current.innerHTML=`<b>Landmark #${best}</b><br/>Region: ${regionLabel(best)}<br/>Norm mag: ${magVal.toFixed(3)}`;
+        };
+        canvas.addEventListener("mousemove",onMove);
+        canvas.addEventListener("mouseleave",hideTip);
+        return()=>{canvas.removeEventListener("mousemove",onMove);canvas.removeEventListener("mouseleave",hideTip);hideTip();};
+      },[renderMode,has2d,images2dReady,t,showWire,showCones,showTextureOverlay,normalizeMode,regionEnabled,showBackground2d,coneScale,pointSize]);
       const toggleRegion=name=>setRegionEnabled(prev=>({...prev,[name]:!prev[name]}));
       return(
         <div className="app">
@@ -956,16 +1391,19 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
             <div className="row" style={{fontSize:12,color:"#93a1c8"}}>neutral #{data.frame_indices[data.neutral_idx]} - peak #{data.frame_indices[data.peak_idx]}</div>
             <div className="row">
               <label>mode</label>
-              <select value={renderMode} onChange={e=>setRenderMode(e.target.value)} disabled={!hasTexture}>
-                <option value="texture">texture</option>
+              <select value={renderMode} onChange={e=>setRenderMode(e.target.value)}>
+                <option value="2d" disabled={!has2d}>2d</option>
+                <option value="texture" disabled={!hasTexture}>texture</option>
                 <option value="points">points</option>
               </select>
             </div>
-            {!hasTexture && <div className="row" style={{fontSize:12,color:"#93a1c8"}}>texture unavailable (video/frame read failed)</div>}
+            {!has2d && <div className="row muted">2d unavailable (video/frame read failed)</div>}
+            {!hasTexture && <div className="row muted">texture unavailable (neutral frame unavailable)</div>}
             <div className="row"><label>t = {t.toFixed(2)}</label><input type="range" min="0" max="1" step="0.01" value={t} onChange={e=>setT(parseFloat(e.target.value))}/></div>
             <div className="row"><label><input type="checkbox" checked={showWire} onChange={e=>setShowWire(e.target.checked)}/>wireframe</label></div>
             <div className="row"><label><input type="checkbox" checked={showCones} onChange={e=>setShowCones(e.target.checked)}/>cones</label></div>
-            {hasTexture&&renderMode==="texture"&&(<div className="row"><label><input type="checkbox" checked={showTextureOverlay} onChange={e=>setShowTextureOverlay(e.target.checked)}/>texture overlay</label></div>)}
+            {has2d&&renderMode==="2d"&&(<div className="row"><label><input type="checkbox" checked={showBackground2d} onChange={e=>setShowBackground2d(e.target.checked)}/>video overlay</label></div>)}
+            {renderMode!=="points"&&(<div className="row"><label><input type="checkbox" checked={showTextureOverlay} onChange={e=>setShowTextureOverlay(e.target.checked)}/>displacement heatmap</label></div>)}
             <div className="row"><label>normalize mode</label><select value={normalizeMode} onChange={e=>setNormalizeMode(e.target.value)}><option value="region">region normalize</option><option value="global">global normalize</option></select></div>
             <div className="row"><label>cone scale: {coneScale.toFixed(2)}</label><input type="range" min="0.2" max="3.0" step="0.05" value={coneScale} onChange={e=>setConeScale(parseFloat(e.target.value))}/></div>
             <div className="row"><label>point size: {pointSize.toFixed(1)}</label><input type="range" min="1" max="8" step="0.2" value={pointSize} onChange={e=>setPointSize(parseFloat(e.target.value))}/></div>
@@ -982,7 +1420,11 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
               <div><b>flipY:</b> {String(data.params.flip_y)} | <b>flipZ:</b> {String(data.params.flip_z)} | <b>z_scale:</b> {data.params.z_scale}</div>
             </div>
           </aside>
-          <section className="viewer"><div ref={mountRef} className="mount"/><div ref={tipRef} className="tt"/></section>
+          <section className="viewer">
+            <div ref={mountRef} className="mount" style={{display:renderMode==="2d"?"none":"block"}}/>
+            <canvas ref={canvas2dRef} className="mount" style={{display:renderMode==="2d"?"block":"none"}}/>
+            <div ref={tipRef} className="tt"/>
+          </section>
         </div>
       );
     }
@@ -1047,14 +1489,45 @@ def generate_motion_viewer(
     )
 
     neutral_row_idx = int(viewer_payload["neutral_idx"])
+    peak_row_idx = int(viewer_payload["peak_idx"])
     neutral_video_frame_idx = int(arrays["frame_indices"][neutral_row_idx])
     neutral_xy_norm = np.asarray(arrays["landmarks_xyz"][neutral_row_idx, :, :2], dtype=np.float32)
+    edges = _extract_facemesh_edges()
     viewer_payload["neutral_image_base64"] = _extract_neutral_frame_base64(
         video_path=video_path,
         frame_idx=neutral_video_frame_idx,
     )
     viewer_payload["uv_coords"] = _build_uv_coords_from_normalized_xy(neutral_xy_norm)
-    viewer_payload["faces"] = _extract_facemesh_faces(viewer_payload["edges"])
+    viewer_payload["edges"] = edges
+    viewer_payload["faces"] = _extract_facemesh_faces(edges)
+
+    row_indices_2d = _segment_row_indices(
+        neutral_idx=neutral_row_idx,
+        peak_idx=peak_row_idx,
+        max_frames=MAX_2D_FRAMES,
+    )
+    frame_indices_2d = arrays["frame_indices"][row_indices_2d].astype(np.int64)
+    frame_images = _extract_video_frames_base64(
+        video_path=video_path,
+        frame_indices=frame_indices_2d,
+        width=int(meta["width"]),
+        height=int(meta["height"]),
+    )
+    if frame_images is None:
+        viewer_payload["frame_images"] = None
+        viewer_payload["all_norm_xy"] = None
+        viewer_payload["base_norm_xy"] = None
+        viewer_payload["peak_norm_xy"] = None
+    else:
+        all_norm_xy = _build_all_norm_xy_payload(
+            landmarks_xyz=arrays["landmarks_xyz"],
+            presence=arrays["presence"],
+            row_indices=row_indices_2d,
+        )
+        viewer_payload["frame_images"] = frame_images
+        viewer_payload["all_norm_xy"] = all_norm_xy
+        viewer_payload["base_norm_xy"] = all_norm_xy[0] if all_norm_xy else None
+        viewer_payload["peak_norm_xy"] = all_norm_xy[-1] if all_norm_xy else None
 
     html = _render_motion_viewer_html(viewer_payload)
     paths.artifact_dir.mkdir(parents=True, exist_ok=True)
