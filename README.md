@@ -10,7 +10,7 @@ FaceAnalyze2는 안면 움직임 영상을 정량 분석하여 neutral 대비 pe
 | 단계별 CLI | `landmarks/segment/align/metrics/viewer` | 단계별 디버깅/재실행 | 단계별 json/csv/png/html |
 | Frontend API | `dynamicAnalysis(vd_path, motion)` | 프론트 표시용 이미지/metrics 계약 반환 | base64 PNG 5개 + metrics dict |
 | Motion Viewer | `faceanalyze2 viewer generate ...` | 3D motion viewer HTML 생성 | `motion_viewer.html` |
-| Gradio Demo | `python -m faceanalyze2.demo.gradio_app` | 교수님 시연용 로컬 UI | 로컬 브라우저 데모 |
+| Gradio Demo | `python -m faceanalyze2.demo.gradio_app` | 데모 시연용 로컬 UI | 로컬 브라우저 데모 |
 
 ## 3) 설치/환경
 - Python `3.11` 권장
@@ -28,9 +28,9 @@ python -m pip install -e ".[dev]"
 python -m pip install -e ".[dev,demo]"
 ```
 
-- MediaPipe 모델 파일은 저장소에 커밋하지 않습니다.
+- MediaPipe 모델 파일은 별도로 다운로드가 필요합니다.
   - 위치: `models/face_landmarker.task`
-  - 안내: `models/README.md`
+  - 다운로드 안내: [`models/README.md`](models/README.md)
 
 ## 4) Quickstart
 ### ① CLI로 한 번에 분석
