@@ -84,23 +84,40 @@ python -m faceanalyze2.demo.gradio_app
 | viewer | `motion_viewer.html` | 3D/2D 인터랙티브 모션 뷰어 |
 
 ## 6) Frontend Integration
-핵심 계약은 `dynamicAnalysis(vd_path, motion)`입니다.
 
-- `motion` 허용값: `big-smile | blinking-motion | eyebrow-motion`
-- 반환 dict의 고정 키(변경 금지):
-  - `'key rest'`
-  - `'key exp'`
-  - `'key value graph'`
-  - `'before regi'`
-  - `'after regi'`
-  - `'metrics'`
-- 이미지 값은 `data:image/...` prefix 없는 base64 PNG 문자열입니다.
-- `metrics.roi_metrics.<roi>.AI`와 `score`:
-  - `AI = abs(L_peak - R_peak) / max(eps, (L_peak + R_peak)/2)`
-  - `score = (1 - clamp(AI, 0, 1)) * 100`
-- `big-smile`은 mouth + area0~3 ROI를 포함하며, area0~3는 pair-table 간접 인덱스 기반입니다.
+프론트엔드에서 분석 결과를 받아 화면에 표시할 때 사용하는 API입니다.
 
-프론트 상세 계약/예시는 `docs/FRONTEND_INTEGRATION.md`를 참고하세요.
+### 호출 방법
+```python
+from faceanalyze2 import dynamicAnalysis
+result = dynamicAnalysis(vd_path, motion)
+```
+
+### `motion` 허용값
+| motion 값 | 내부 task 매핑 | 분석 대상 |
+|---|---|---|
+| `big-smile` | `smile` | 미소 (입 + area0~3 ROI) |
+| `blinking-motion` | `eyeclose` | 눈 감김 |
+| `eyebrow-motion` | `brow` | 눈썹 움직임 |
+
+### 반환 키 (변경 금지)
+| 키 | 타입 | 내용 |
+|---|---|---|
+| `'key rest'` | base64 PNG | neutral(무표정) 프레임 이미지 |
+| `'key exp'` | base64 PNG | peak(최대 움직임) 프레임 이미지 |
+| `'key value graph'` | base64 PNG | 좌/우 displacement 그래프 |
+| `'before regi'` | base64 PNG | 정합 전 랜드마크 오버레이 |
+| `'after regi'` | base64 PNG | 정합 후 랜드마크 오버레이 |
+| `'metrics'` | dict | ROI별 비대칭 지수 및 점수 |
+
+> 이미지 값에는 `data:image/...` prefix가 포함되어 있지 않습니다. 프론트에서 표시할 때 직접 붙여주세요.
+
+### 비대칭 지수 계산
+- **AI** = `abs(L_peak - R_peak) / max(ε, (L_peak + R_peak) / 2)`
+- **score** = `(1 - clamp(AI, 0, 1)) × 100`
+  - 0점 = 완전 비대칭, 100점 = 완전 대칭
+
+프론트 연동 상세 계약은 [`docs/FRONTEND_INTEGRATION.md`](docs/FRONTEND_INTEGRATION.md)를 참고하세요.
 
 ## 7) 보안/주의
 - 환자 영상/프레임/landmark 결과는 PHI를 포함할 수 있습니다.
