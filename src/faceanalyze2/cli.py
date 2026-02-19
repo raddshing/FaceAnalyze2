@@ -16,6 +16,7 @@ from faceanalyze2.analysis.segmentation import SegmentParams, run_segmentation
 from faceanalyze2.config import RunConfig, TaskType, artifact_paths_for_video, normalize_task_value
 from faceanalyze2.landmarks.mediapipe_face_landmarker import extract_face_landmarks_from_video
 from faceanalyze2.io.video_reader import probe_video, save_frame_png
+from faceanalyze2.viz.motion_viewer import generate_motion_viewer
 
 app = typer.Typer(
     add_completion=False,
@@ -27,11 +28,13 @@ landmarks_app = typer.Typer(help="Landmark extraction utilities.")
 segment_app = typer.Typer(help="Signal segmentation utilities.")
 align_app = typer.Typer(help="Landmark alignment utilities.")
 metrics_app = typer.Typer(help="ROI metrics and plots utilities.")
+viewer_app = typer.Typer(help="3D motion viewer utilities.")
 app.add_typer(video_app, name="video")
 app.add_typer(landmarks_app, name="landmarks")
 app.add_typer(segment_app, name="segment")
 app.add_typer(align_app, name="align")
 app.add_typer(metrics_app, name="metrics")
+app.add_typer(viewer_app, name="viewer")
 console = Console()
 
 
@@ -891,6 +894,55 @@ def metrics_run(
     console.print(f"Saved timeseries CSV to {result['timeseries_csv_path']}")
     console.print(f"Saved metrics CSV to {result['metrics_csv_path']}")
     console.print(f"Saved metrics JSON to {result['metrics_json_path']}")
+
+
+@viewer_app.command("generate")
+def viewer_generate(
+    video: Path = typer.Option(
+        ...,
+        "--video",
+        "-v",
+        help="Input video path used for artifact lookup.",
+    ),
+    artifact_root: Path = typer.Option(
+        Path("artifacts"),
+        "--artifact-root",
+        help="Root directory for artifact outputs.",
+    ),
+    landmarks: Path | None = typer.Option(
+        None,
+        "--landmarks",
+        help="Optional landmarks.npz path. Defaults to artifacts/<video_stem>/landmarks.npz.",
+    ),
+    segment: Path | None = typer.Option(
+        None,
+        "--segment",
+        help="Optional segment.json path. Defaults to artifacts/<video_stem>/segment.json.",
+    ),
+) -> None:
+    try:
+        result = generate_motion_viewer(
+            video_path=video,
+            artifact_root=artifact_root,
+            landmarks_path=landmarks,
+            segment_path=segment,
+        )
+    except FileNotFoundError as exc:
+        message = str(exc)
+        if "Landmarks file not found" in message:
+            raise typer.BadParameter(message, param_hint="--landmarks") from exc
+        if "Segment file not found" in message:
+            raise typer.BadParameter(message, param_hint="--segment") from exc
+        raise typer.BadParameter(message, param_hint="--video") from exc
+    except ImportError as exc:
+        raise typer.BadParameter(str(exc), param_hint="mediapipe") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--video") from exc
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--video") from exc
+
+    console.print(f"Saved 3D motion viewer to {result['html_path']}")
+    console.print("Open in browser...")
 
 
 def run() -> None:
