@@ -41,4 +41,53 @@
 
 ## 업무일지
 
-(작업 시작 후 여기에 기록)
+### 2026-02-27 세션 1 (Step 1 시도 → 차단)
+
+- Step 1 runtime_paths.py 이식 시도 3회 (VSCode 자동 브랜치 전환으로 소실)
+- viewer 커밋이 feat/v2-exe-integration에 잘못 커밋됨 (12fc9ac)
+- 총괄에게 보고 → 총괄이 worktree 생성 및 Step 1 직접 복구 (26447b3)
+
+### 2026-02-27 세션 2 (Step 2~5 완료)
+
+**작업 경로**: `/c/Users/123an/Desktop/moo/dev/FA2-setup` (git worktree)
+
+#### Step 2: Desktop UI 이식 (d13b9a1에 포함)
+- `src/faceanalyze2/desktop/` 7개 파일 작성:
+  - `__init__.py`, `app.py`, `main_window.py`, `input_panel.py`
+  - `pipeline_worker.py`, `results_panel.py`, `image_utils.py`
+- `src/faceanalyze2/demo/` 삭제 (git rm)
+- `tests/test_gradio_demo_helpers.py` 삭제 (demo 의존 테스트)
+- `pyproject.toml`: `[demo]` extras → `[desktop]` extras
+- ruff: All checks passed
+- pytest: 34 passed, 0 failed
+
+#### Step 3: PyInstaller 패키징 이식 (95f448d)
+- `packaging/faceanalyze2.spec`: onedir spec, conda DLL, ICU 제외, PySide6 VC runtime
+- `packaging/build.ps1`: 빌드 자동화 스크립트
+- `packaging/test_exe.ps1`: exe 스모크 테스트
+- pytest: 34 passed
+
+#### Step 4: README.md 업데이트 (875396c)
+- Gradio → Desktop UI 전환 반영
+- 설치 가이드 `[desktop]` extras
+- PyInstaller exe 빌드 섹션 추가
+- Artifacts/Frontend 섹션 간소화
+
+#### Step 5: 최종 검증
+- ruff check .: **All checks passed**
+- pytest: **34 passed, 0 failed**
+- 목표 달성 (기존 실패 1개도 해결됨: 총괄이 테스트 수정)
+
+#### 최종 커밋 로그 (origin/main 대비)
+```
+875396c docs: update README for desktop UI
+95f448d feat(packaging): add PyInstaller onedir build configuration
+d13b9a1 docs: add escalation rules to all agent work diaries
+26447b3 feat(portable): add runtime_paths module and refactor paths
+1829dd9 docs: update viewer work diary and CLAUDE.md progress
+c43bb41 docs: add agent-specific prompt files for Phase 1 and Phase 2
+4d7dc69 chore: add agent persona and work diary files
+42b5424 chore: create CLAUDE.md for v2 multi-agent development guide
+```
+
+**상태: 모든 임무 완료**

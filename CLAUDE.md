@@ -89,6 +89,7 @@ FaceAnalyze2는 안면마비 분석 도구로, 영상에서 얼굴 랜드마크�
 - **원인**: untracked file이 양쪽 브랜치에 존재하여 checkout 충돌, VSCode/외부 프로세스의 자동 전환
 - **해결**: `git stash -u` (untracked 포함)로 stash 후 checkout
 - **예방**: 1) 수정 후 즉시 커밋, 2) 브랜치 전환 전 반드시 `git stash -u`, 3) 작업 후 `git branch --show-current`로 확인
+- **v2 재발 (2026-02-27)**: Agent-Viewer Fix 3 작업 중 VSCode가 feat/v2-exe-integration으로 자동 전환. 미커밋 Edit 3개가 유실되고 체크박스만 잘못된 브랜치에 커밋됨. cherry-pick + reset으로 복구 후 누락 변경 재적용. **커밋 전 `git branch --show-current` 확인이 반드시 필요한 이유를 다시 확인함**
 
 ### [경로] exe 모드에서 CWD≠base_dir 시 dynamicAnalysis FileNotFoundError
 - **증상**: exe 실행 → 영상 로드 → Analyze 클릭 시 Step 5에서 `FileNotFoundError`
@@ -228,6 +229,10 @@ main (origin/main 동기화)  ← 깨끗한 베이스
 
 ### 완료
 - [2026-02-27] [총괄] [완료] Phase 0 - 백업, 브랜치 3개 생성, CLAUDE.md 작성
+- [2026-02-27] [Agent-Viewer] [완료] Fix 1: 포인트 기본 크기 2.8→4.5 (a452ae9)
+- [2026-02-27] [Agent-Viewer] [완료] Fix 2: texture/points 초기 렌더링 수정 (6e358e9)
+- [2026-02-27] [Agent-Viewer] [완료] Fix 3: 벡터 z축 flatten 토글 추가 (c276040)
+- [2026-02-27] [Agent-Viewer] [완료] Fix 4: t-슬라이더 자동 재생/일시정지 (652c93c)
 
 ### 진행 중
 
