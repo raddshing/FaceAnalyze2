@@ -70,3 +70,13 @@
 #### 총괄 보고 사항
 - **PR 머지**: PR #18은 OPEN 상태. 머지 판단은 총괄 승인 필요 (규칙 #3)
 - **외부 전달**: `docs/FRONTEND_CHANGES_V3.md` 문서는 작성 완료. 프론트엔드 팀에 실제 전달은 총괄 검토 후 진행 필요 (규칙 #4)
+
+---
+
+## 총괄 보고
+
+### [2026-02-27] dev-v2에 실수 커밋 유입 (VSCode 자동 브랜치 전환)
+- **상황**: 업무일지 커밋 시 VSCode가 `feat/v3-github-management` → `dev-v2`로 자동 전환. 업무일지 커밋 `135f398`이 dev-v2에 직접 커밋됨 (dev-v2 직접 커밋 금지 규칙 위반). 또한 다른 에이전트의 커밋 `689b193` (chore: remove obsolete prompts)도 dev-v2 위에 존재.
+- **시도한 것**: `git cherry-pick 135f398`로 feat/v3-github-management에 동일 커밋을 복제 (`31c3efa`). push 완료. dev-v2에 대한 파괴적 조작(reset)은 다른 에이전트 커밋이 있어 수행하지 않음.
+- **차단 이유**: dev-v2에 push되지 않은 로컬 커밋 2개(`135f398`, `689b193`)가 존재. 내가 이를 제거/정리하면 다른 에이전트 작업이 손실될 수 있음.
+- **요청**: dev-v2의 로컬 커밋 2개(`135f398` 헙헙이 업무일지, `689b193` prompts/logs 정리)를 어떻게 처리할지 총괄 판단 필요. (1) 그대로 push, (2) 135f398만 revert 후 push, (3) reset 후 689b193만 cherry-pick 등 옵션 있음.
