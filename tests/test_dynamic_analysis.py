@@ -116,11 +116,11 @@ def test_dynamic_analysis_big_smile_contract(
     metrics = payload["metrics"]
     assert metrics["motion"] == "big-smile"
     roi_metrics = metrics["roi_metrics"]
-    for roi_name in ("mouth", "area0_green", "area1_blue", "area2_yellow", "area3_red"):
+    for roi_name in ("mouth", "eye", "eyebrow", "area0_green", "area1_blue", "area2_yellow", "area3_red"):
         assert roi_name in roi_metrics
         assert "L_peak" in roi_metrics[roi_name]
         assert "R_peak" in roi_metrics[roi_name]
-        assert "AI" in roi_metrics[roi_name]
+        assert "Asymmetry Index" in roi_metrics[roi_name]
         assert "score" in roi_metrics[roi_name]
 
 

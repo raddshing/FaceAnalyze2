@@ -28,10 +28,11 @@ PRIMARY_ROI_BY_MOTION = {
     "blinking-motion": "eye",
     "eyebrow-motion": "eyebrow",
 }
+ALL_ROIS = ["mouth", "eye", "eyebrow", "area0_green", "area1_blue", "area2_yellow", "area3_red"]
 ROI_ORDER_BY_MOTION = {
-    "big-smile": ["mouth", "area0_green", "area1_blue", "area2_yellow", "area3_red"],
-    "blinking-motion": ["eye"],
-    "eyebrow-motion": ["eyebrow"],
+    "big-smile": ALL_ROIS,
+    "blinking-motion": ALL_ROIS,
+    "eyebrow-motion": ALL_ROIS,
 }
 EPSILON = 1e-6
 LANDMARK_COUNT = 478
@@ -303,7 +304,7 @@ def _compute_roi_metrics_from_series(
         metrics[roi_name] = {
             "L_peak": left_peak,
             "R_peak": right_peak,
-            "AI": float(ai),
+            "Asymmetry Index": float(ai),
             "score": float(score),
         }
     return metrics
@@ -312,25 +313,38 @@ def _compute_roi_metrics_from_series(
 def _key_value_graph_png(
     *,
     result: dict[str, Any],
-    roi_name: str,
+    roi_names: list[str],
     motion: str,
     width: int,
     height: int,
 ) -> str:
-    series = result["series"][roi_name]
     time_s = np.asarray(result["time_s"], dtype=np.float32)
-    left = np.asarray(series["left_disp"], dtype=np.float32)
-    right = np.asarray(series["right_disp"], dtype=np.float32)
+    n_rois = len(roi_names)
+    n_rows = 4
+    n_cols = 2
 
     def _draw(fig: Any) -> None:
-        ax = fig.add_subplot(111)
-        ax.plot(time_s, left, color="#d62728", linewidth=2.2, label="Left")
-        ax.plot(time_s, right, color="#2ca02c", linewidth=2.2, label="Right")
-        ax.set_title(f"{motion} - {roi_name} displacement")
-        ax.set_xlabel("time (s)")
-        ax.set_ylabel("normalized displacement")
-        ax.grid(alpha=0.25)
-        ax.legend(loc="best")
+        axes = fig.subplots(n_rows, n_cols)
+        for idx in range(n_rows * n_cols):
+            row, col = divmod(idx, n_cols)
+            ax = axes[row][col]
+            if idx < n_rois:
+                roi_name = roi_names[idx]
+                series = result["series"][roi_name]
+                left = np.asarray(series["left_disp"], dtype=np.float32)
+                right = np.asarray(series["right_disp"], dtype=np.float32)
+                ax.plot(time_s, left, color="#d62728", linewidth=1.8, label="Left")
+                ax.plot(time_s, right, color="#2ca02c", linewidth=1.8, label="Right")
+                ax.set_title(roi_name, fontsize=10, fontweight="bold")
+                ax.set_xlabel("time (s)", fontsize=8)
+                ax.set_ylabel("norm. disp.", fontsize=8)
+                ax.tick_params(labelsize=7)
+                ax.grid(alpha=0.25)
+                ax.legend(loc="best", fontsize=7)
+            else:
+                ax.set_visible(False)
+        fig.suptitle(f"{motion} — L/R displacement (all ROIs)", fontsize=12, fontweight="bold")
+        fig.tight_layout(rect=[0, 0, 1, 0.96])
 
     return _matplotlib_png_base64(_draw, width=width, height=height)
 
@@ -430,10 +444,10 @@ def dynamicAnalysis(vd_path: str | Path, motion: str) -> dict[str, Any]:
     )
     key_value_graph = _key_value_graph_png(
         result=result,
-        roi_name=primary_roi,
+        roi_names=roi_names,
         motion=motion_name,
-        width=960,
-        height=420,
+        width=1200,
+        height=1400,
     )
 
     metrics_payload: dict[str, Any] = {

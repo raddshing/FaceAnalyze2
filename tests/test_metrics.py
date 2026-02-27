@@ -43,7 +43,7 @@ def test_compute_roi_displacements_expected_values() -> None:
     assert np.isclose(mouth["right_dx"][-1], 0.75, atol=1e-6)
     assert result["reversed"] is False
     assert np.array_equal(result["frame_indices"], np.asarray([11, 12, 13, 14], dtype=np.int64))
-    assert np.isclose(result["metrics"]["mouth"]["AI"], 2.0 / 3.0, atol=1e-6)
+    assert np.isclose(result["metrics"]["mouth"]["Asymmetry Index"], 2.0 / 3.0, atol=1e-6)
     assert np.isclose(result["metrics"]["mouth"]["score"], 100.0 / 3.0, atol=1e-6)
 
 
