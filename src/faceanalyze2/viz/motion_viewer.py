@@ -933,12 +933,13 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
       const [showBackground2d,setShowBackground2d]=React.useState(true);
       const [coneScale,setConeScale]=React.useState(1.0);
       const [pointSize,setPointSize]=React.useState(4.5);
+      const [flattenVectors,setFlattenVectors]=React.useState(true);
       const [regionEnabled,setRegionEnabled]=React.useState(initialRegions);
       const [images2dReady,setImages2dReady]=React.useState(false);
-      const settingsRef=React.useRef({t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,regionEnabled});
+      const settingsRef=React.useRef({t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,flattenVectors,regionEnabled});
       React.useEffect(()=>{if(!has2d&&renderMode==="2d"){setRenderMode("points")}},[has2d,renderMode]);
       React.useEffect(()=>{if(!hasTexture&&renderMode==="texture"){setRenderMode(has2d?"2d":"points")}},[hasTexture,has2d,renderMode]);
-      React.useEffect(()=>{settingsRef.current={t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,regionEnabled};if(viewerRef.current?.updateScene)viewerRef.current.updateScene()},[t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,regionEnabled]);
+      React.useEffect(()=>{settingsRef.current={t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,flattenVectors,regionEnabled};if(viewerRef.current?.updateScene)viewerRef.current.updateScene()},[t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,flattenVectors,regionEnabled]);
       React.useEffect(()=>{
         if(!has2d){images2dRef.current=[];setImages2dReady(false);return;}
         let cancelled=false;
@@ -1146,6 +1147,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
                 const dy=(b[1]-pk[1])*frameH;
                 u=[dx,dy,0.0];
               }
+              if(s.flattenVectors){u=[u[0],u[1],0.0];}
               if(!Number.isFinite(u[0])||!Number.isFinite(u[1])||!Number.isFinite(u[2]))continue;
               const magU=Math.sqrt(u[0]*u[0]+u[1]*u[1]+u[2]*u[2]);
               if(magU<1e-6)continue;
@@ -1444,6 +1446,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
             <div className="row"><label>t = {t.toFixed(2)}</label><input type="range" min="0" max="1" step="0.01" value={t} onChange={e=>setT(parseFloat(e.target.value))}/></div>
             <div className="row"><label><input type="checkbox" checked={showWire} onChange={e=>setShowWire(e.target.checked)}/>wireframe</label></div>
             <div className="row"><label><input type="checkbox" checked={showCones} onChange={e=>setShowCones(e.target.checked)}/>cones</label></div>
+            <div className="row"><label><input type="checkbox" checked={flattenVectors} onChange={e=>setFlattenVectors(e.target.checked)}/>2D vectors (flatten z)</label></div>
             {has2d&&renderMode==="2d"&&(<div className="row"><label><input type="checkbox" checked={showBackground2d} onChange={e=>setShowBackground2d(e.target.checked)}/>video overlay</label></div>)}
             {renderMode!=="points"&&(<div className="row"><label><input type="checkbox" checked={showTextureOverlay} onChange={e=>setShowTextureOverlay(e.target.checked)}/>displacement heatmap</label></div>)}
             <div className="row"><label>normalize mode</label><select value={normalizeMode} onChange={e=>setNormalizeMode(e.target.value)}><option value="region">region normalize</option><option value="global">global normalize</option></select></div>
