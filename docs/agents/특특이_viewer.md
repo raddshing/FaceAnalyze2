@@ -71,3 +71,46 @@
 - `pytest -q`: 35 passed, 1 failed (기존 버그 `test_segment_command_guides_when_landmarks_are_missing`)
 - `ruff check .`: All checks passed
 - 내 코드로 인한 회귀: 없음
+
+### 2026-02-27 Phase 2 - Round 2 Viewer 개선 (feat/v3-viewer-round2)
+
+#### Fix 1: 검은화면 해결 (4fb2dba)
+- **원인 분석**: 초기 모드가 2d일 때 mount div가 `display:none`이라 renderer가 0x0 크기로 생성됨. 3D 모드 전환 시 `renderer.setSize()`가 불리지 않아 까만 화면.
+- **해결**: `updateScene()` 끝의 3D 렌더 블록에서 `renderer.getSize()`와 container 크기를 비교하여 불일치 시 리사이즈 + camera aspect 갱신
+- **교훈**: Phase 1의 `updateProjectionMatrix()` 추가만으로는 부족했음. 근본 원인은 renderer 캔버스 크기 자체가 0이었던 것.
+- 테스트: 4/4 passed
+
+#### Fix 2: 크기 기본값 조정 (1f8581a)
+- pointSize: `4.5` → `2.8` (useState + PointsMaterial)
+- coneScale: `1.0` → `2.5`
+- 테스트: 4/4 passed
+
+#### Fix 3: 카메라 정면 시작 (b12877b)
+- `perspectiveCamera.position.set(radius*0.8, radius*0.45, radius*1.1)` → `set(0, 0, radius*1.5)`
+- 대각선 뷰에서 Z축 정면 뷰로 변경. 얼굴이 바로 정면으로 보임.
+- 테스트: 4/4 passed
+
+#### Fix 6: 벡터 표면 추종 - 접선면 투영 (6bd848c)
+- **가장 복잡한 작업**
+- Python 측:
+  - `_compute_surface_normals()`: FACEMESH 삼각형 mesh에서 각 vertex의 법선 벡터 계산 (인접 face normal 평균)
+  - `_project_to_tangent_plane()`: `v_tangent = v - dot(v,n)*n` 후 재정규화
+  - `unit_dir_tangent` 배열을 viewer payload에 추가
+  - mediapipe 없는 환경 fallback: 기존 z=0 flattening
+  - `payload_edges` 변수로 edges 중복 계산 제거
+- JS 측:
+  - `tangentDirs=data.unit_dir_tangent||null` 데이터 추출
+  - `flattenVectors=true`일 때 tangent 벡터 사용 (없으면 z=0 fallback)
+  - UI 라벨: "2D vectors (flatten z)" → "Surface tangent vectors"
+- 테스트: 4/4 passed, ruff clean
+
+#### 사고 대응
+- VSCode 자동 브랜치 전환이 2회 발생 (`feat/v3-metrics-all-rois`로 전환됨)
+- 매번 `git stash -u` → `git checkout` → `git stash pop`으로 복구
+- 다른 에이전트의 `dynamic_analysis.py` 변경이 stash에 섞여왔으나 `git checkout --`으로 정리
+- **교훈 재확인**: 커밋 전 반드시 `git branch --show-current` 확인!
+
+#### 최종 검증
+- `pytest tests/test_motion_viewer.py -q`: 4/4 passed (모든 Fix 후)
+- `ruff check src/faceanalyze2/viz/motion_viewer.py`: All checks passed
+- 회귀: 없음
