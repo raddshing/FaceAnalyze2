@@ -1178,6 +1178,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
               bgPlane.scale.set(frameW,frameH,1);
             }
           }
+          if(s.renderMode!=="2d"){perspectiveCamera.updateProjectionMatrix();controlsPerspective.update();renderer.render(scene,perspectiveCamera);}
         };
 
         const hideTip=()=>{if(tipRef.current)tipRef.current.style.display="none"};
