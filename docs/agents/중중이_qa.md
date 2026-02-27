@@ -42,4 +42,34 @@
 
 ## 업무일지
 
-(작업 시작 후 여기에 기록)
+### 2026-02-27 Phase 2 - 브랜치 통합 & QA 검증
+
+#### 1단계: 브랜치 머지
+- `git merge feat/v2-exe-integration` → CLAUDE.md, 무돌이/특특이 일지 충돌 해결 (theirs 선택)
+- `git merge feat/v2-viewer-fixes` → 무돌이/중중이 일지 충돌 해결 (ours 선택)
+- 총괄이 직접 수행 (3개 충돌 모두 내용 손실 없이 해결)
+
+#### 2단계: 전체 테스트
+- `ruff check .`: **All checks passed** ✅
+- `pytest -q`: **33 passed, 1 failed** ⚠️
+  - 실패: `test_segment_command_guides_when_landmarks_are_missing` (origin/main 기존 버그)
+  - v2 변경사항으로 인한 회귀: **없음**
+
+#### 3단계: 기능 검증
+| 항목 | 결과 | 비고 |
+|------|------|------|
+| Viewer test_motion_viewer.py | 4/4 passed ✅ | |
+| Dynamic Analysis API | 3/3 passed ✅ | big-smile, blinking, unsupported 모두 통과 |
+| runtime_paths import | 정상 ✅ | base_dir, artifact_root, model_path 올바른 경로 |
+| config.py 연동 | 정상 ✅ | artifact_dir_for_video가 runtime_paths 사용 |
+| Desktop module import | 정상 ✅ | `import faceanalyze2.desktop` 성공 |
+| metrics CLI | 보존 ✅ | origin/main의 `metrics run` 명령 정상 |
+| motion_viewer.py Fix 1 | 코드 확인 ✅ | updateProjectionMatrix() + 강제 render |
+| motion_viewer.py Fix 2 | 코드 확인 ✅ | flattenVectors 토글 (5 references) |
+| motion_viewer.py Fix 3 | 코드 확인 ✅ | useState(4.5) |
+| motion_viewer.py Fix 4 | 코드 확인 ✅ | isPlaying + playSpeed states |
+
+#### 결론
+- **머지 가능**: dev-v2 안정 상태
+- **회귀 없음**: 기존 기능 모두 보존
+- **알려진 이슈**: `test_segment_command_guides_when_landmarks_are_missing` (origin/main 기존 버그, v2 무관)

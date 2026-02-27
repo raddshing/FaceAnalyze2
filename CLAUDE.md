@@ -233,10 +233,20 @@ main (origin/main 동기화)  ← 깨끗한 베이스
 - [2026-02-27] [Agent-Viewer] [완료] Fix 2: texture/points 초기 렌더링 수정 (6e358e9)
 - [2026-02-27] [Agent-Viewer] [완료] Fix 3: 벡터 z축 flatten 토글 추가 (c276040)
 - [2026-02-27] [Agent-Viewer] [완료] Fix 4: t-슬라이더 자동 재생/일시정지 (652c93c)
-
-### 진행 중
+- [2026-02-27] [Agent-Setup] [완료] Step 1: runtime_paths.py 이식 + config/landmarker 경로 리팩터링 (26447b3)
+- [2026-02-27] [Agent-Setup] [완료] Step 2: Desktop UI 이식 + Gradio 제거 (d13b9a1)
+- [2026-02-27] [Agent-Setup] [완료] Step 3: PyInstaller 패키징 이식 (95f448d)
+- [2026-02-27] [Agent-Setup] [완료] Step 4: README.md Desktop UI 반영 (875396c)
+- [2026-02-27] [Agent-Setup] [완료] Step 5: 최종 검증 (ruff clean, 34 passed)
+- [2026-02-27] [총괄] [완료] Phase 2 - dev-v2에 두 브랜치 머지 + QA 검증
+  - ruff check: All passed
+  - pytest: 33 passed, 1 known failure (test_segment_command_guides_when_landmarks_are_missing)
+  - Viewer 4/4 passed, Dynamic Analysis 3/3 passed
+  - runtime_paths, config, desktop import 모두 정상
+  - metrics CLI 보존 확인
 
 ### 차단됨
+- (없음)
 
 ---
 
