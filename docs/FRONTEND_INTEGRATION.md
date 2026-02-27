@@ -22,7 +22,7 @@ result = dynamicAnalysis(vd_path, motion)
 - `eyebrow-motion -> brow`
 
 ## Output Contract (Stable)
-반환 dict는 아래 키를 반드시 포함합니다.  
+반환 dict는 아래 키를 반드시 포함합니다.
 키 이름(공백 포함)은 프론트 계약이므로 변경하지 않습니다.
 
 - `'key rest'`: base64 PNG 문자열
@@ -60,18 +60,30 @@ result = dynamicAnalysis(vd_path, motion)
     "mouth": {
       "L_peak": 0.32,
       "R_peak": 0.21,
-      "AI": 0.41,
+      "Asymmetry Index": 0.41,
       "score": 59.0
-    }
+    },
+    "eye": {
+      "L_peak": 0.15,
+      "R_peak": 0.12,
+      "Asymmetry Index": 0.22,
+      "score": 78.0
+    },
+    "eyebrow": { "..." : "..." },
+    "area0_green": { "..." : "..." },
+    "area1_blue": { "..." : "..." },
+    "area2_yellow": { "..." : "..." },
+    "area3_red": { "..." : "..." }
   }
 }
 ```
 
 계산 규칙:
-- `AI = abs(L_peak - R_peak) / max(eps, (L_peak + R_peak)/2)`
-- `score = (1 - clamp(AI, 0, 1)) * 100`
+- `Asymmetry Index = abs(L_peak - R_peak) / max(eps, (L_peak + R_peak)/2)`
+- `score = (1 - clamp(Asymmetry Index, 0, 1)) * 100`
 
-`big-smile`에서는 mouth + area0~3 ROI가 포함됩니다.
+모든 motion(`big-smile`, `blinking-motion`, `eyebrow-motion`)에서 7개 ROI를 전부 반환합니다:
+`mouth`, `eye`, `eyebrow`, `area0_green`, `area1_blue`, `area2_yellow`, `area3_red`.
 
 ## ROI Notes (Pair Indirect Indices)
 area0~3 및 mouth/eye/eyebrow ROI는 MediaPipe landmark 번호 직접 리스트가 아니라, pair-table 간접 인덱스입니다.
@@ -101,7 +113,7 @@ const metricsRows = Object.entries(result.metrics.roi_metrics).map(([roi, v]) =>
   roi,
   L_peak: v.L_peak,
   R_peak: v.R_peak,
-  AI: v.AI,
+  asymmetryIndex: v["Asymmetry Index"],
   score: v.score,
 }));
 ```
@@ -117,4 +129,4 @@ const metricsRows = Object.entries(result.metrics.roi_metrics).map(([roi, v]) =>
 ## Security / PHI
 - 반환 이미지와 viewer/demo 화면은 환자 얼굴 프레임이 포함될 수 있습니다.
 - 외부 공유 금지 정책을 UI와 운영 문서에 명시해야 합니다.
-- Gradio demo는 로컬 실행만 허용(`share=True` 금지).
+- Desktop UI 및 exe 배포 시 외부 네트워크 노출을 하지 않아야 합니다.
