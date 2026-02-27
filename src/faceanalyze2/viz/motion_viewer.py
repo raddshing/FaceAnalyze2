@@ -1183,7 +1183,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
               bgPlane.scale.set(frameW,frameH,1);
             }
           }
-          if(s.renderMode!=="2d"){perspectiveCamera.updateProjectionMatrix();controlsPerspective.update();renderer.render(scene,perspectiveCamera);}
+          if(s.renderMode!=="2d"){const cw=container.clientWidth,ch=container.clientHeight;if(cw>0&&ch>0){const sz=new THREE.Vector2();renderer.getSize(sz);if(Math.abs(sz.x-cw)>1||Math.abs(sz.y-ch)>1){renderer.setSize(cw,ch);perspectiveCamera.aspect=cw/Math.max(ch,1);}}perspectiveCamera.updateProjectionMatrix();controlsPerspective.update();renderer.render(scene,perspectiveCamera);}
         };
 
         const hideTip=()=>{if(tipRef.current)tipRef.current.style.display="none"};
