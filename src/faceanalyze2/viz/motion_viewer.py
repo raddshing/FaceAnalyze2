@@ -935,11 +935,14 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
       const [pointSize,setPointSize]=React.useState(4.5);
       const [flattenVectors,setFlattenVectors]=React.useState(true);
       const [regionEnabled,setRegionEnabled]=React.useState(initialRegions);
+      const [isPlaying,setIsPlaying]=React.useState(false);
+      const [playSpeed,setPlaySpeed]=React.useState(1.0);
       const [images2dReady,setImages2dReady]=React.useState(false);
       const settingsRef=React.useRef({t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,flattenVectors,regionEnabled});
       React.useEffect(()=>{if(!has2d&&renderMode==="2d"){setRenderMode("points")}},[has2d,renderMode]);
       React.useEffect(()=>{if(!hasTexture&&renderMode==="texture"){setRenderMode(has2d?"2d":"points")}},[hasTexture,has2d,renderMode]);
       React.useEffect(()=>{settingsRef.current={t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,flattenVectors,regionEnabled};if(viewerRef.current?.updateScene)viewerRef.current.updateScene()},[t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,flattenVectors,regionEnabled]);
+      React.useEffect(()=>{if(!isPlaying)return;const interval=setInterval(()=>{setT(prev=>{const next=prev+0.01*playSpeed;return next>1?0:next;});},30);return()=>clearInterval(interval);},[isPlaying,playSpeed]);
       React.useEffect(()=>{
         if(!has2d){images2dRef.current=[];setImages2dReady(false);return;}
         let cancelled=false;
@@ -1443,7 +1446,8 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
             </div>
             {!has2d && <div className="row muted">2d unavailable (video/frame read failed)</div>}
             {!hasTexture && <div className="row muted">texture unavailable (neutral frame unavailable)</div>}
-            <div className="row"><label>t = {t.toFixed(2)}</label><input type="range" min="0" max="1" step="0.01" value={t} onChange={e=>setT(parseFloat(e.target.value))}/></div>
+            <div className="row"><label>t = {t.toFixed(2)}</label><input type="range" min="0" max="1" step="0.01" value={t} onChange={e=>{setIsPlaying(false);setT(parseFloat(e.target.value))}}/></div>
+            <div className="row" style={{display:"flex",gap:"6px"}}><button style={{flex:1}} onClick={()=>setIsPlaying(p=>!p)}>{isPlaying?"\u23f8 Pause":"\u25b6 Play"}</button><button style={{flex:0,padding:"7px 10px",opacity:playSpeed===0.5?1:0.5}} onClick={()=>setPlaySpeed(0.5)}>0.5x</button><button style={{flex:0,padding:"7px 10px",opacity:playSpeed===1.0?1:0.5}} onClick={()=>setPlaySpeed(1.0)}>1x</button><button style={{flex:0,padding:"7px 10px",opacity:playSpeed===2.0?1:0.5}} onClick={()=>setPlaySpeed(2.0)}>2x</button></div>
             <div className="row"><label><input type="checkbox" checked={showWire} onChange={e=>setShowWire(e.target.checked)}/>wireframe</label></div>
             <div className="row"><label><input type="checkbox" checked={showCones} onChange={e=>setShowCones(e.target.checked)}/>cones</label></div>
             <div className="row"><label><input type="checkbox" checked={flattenVectors} onChange={e=>setFlattenVectors(e.target.checked)}/>2D vectors (flatten z)</label></div>
