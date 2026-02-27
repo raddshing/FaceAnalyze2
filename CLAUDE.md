@@ -291,20 +291,18 @@ main (origin/main 동기화)  ← 깨끗한 베이스
 
 ---
 
-## 대화 기록 파일
+## 에이전트 업무일지
 
-compact 대비 각 에이전트의 대화 기록 보관:
+각 에이전트의 신상정보, 총괄 보고 규칙, 작업 기록을 `docs/agents/`에서 관리:
 
 ```
-docs/conversation_logs/
-├── director_log.md       ← 무무치 (총괄) 대화 기록
-├── agent_setup_log.md    ← 무돌이 (Setup) 대화 기록
-├── agent_viewer_log.md   ← 특특이 (Viewer) 대화 기록
-├── agent_qa_log.md       ← 중중이 (QA) 대화 기록
-├── agent_metrics_log.md  ← 달달이 (Metrics) 대화 기록
-├── agent_github_log.md   ← 헙헙이 (GitHub) 대화 기록
-├── agent_docs_log.md     ← 글글이 (Docs) 대화 기록
-└── agent_review_log.md   ← 분석이 (Review) 대화 기록
+docs/agents/
+├── 무무치_director.md   ← 총괄
+├── 무돌이_setup.md      ← Agent-Setup [완료]
+├── 특특이_viewer.md     ← Agent-Viewer [완료]
+├── 중중이_qa.md         ← Agent-QA [완료]
+├── 달달이_metrics.md    ← Agent-Metrics [완료]
+├── 헙헙이_github.md     ← Agent-GitHub
+├── 글글이_docs.md       ← Agent-Docs
+└── 분석이_review.md     ← Agent-Review
 ```
-
-형식: 날짜, 작업 내용, 결정 사항, 결과를 마크다운으로 기록
