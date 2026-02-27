@@ -158,22 +158,14 @@ ruff check .
 ## v2 조직 구조
 
 ```
-총괄 (Director)
-├── Agent-Setup: 환경설정 & 통합 담당
-│   - runtime_paths.py 이식
-│   - Desktop UI 이식
-│   - PyInstaller 패키징 이식
-│   - Gradio 제거
-├── Agent-Viewer: 3D Viewer 개선 담당
-│   - Fix 1: texture/points 초기 렌더링
-│   - Fix 2: 벡터 z축 depth 제거 옵션
-│   - Fix 3: 포인트 기본 크기 증가
-│   - Fix 4: t-슬라이더 자동 재생/일시정지
-└── Agent-QA: 테스트 & QA 담당
-    - 브랜치 통합 (feat/v2-* → dev-v2)
-    - 전체 테스트 실행
-    - 기능 검증
-    - 회귀 테스트
+총괄 무무치 (Director)
+├── 무돌이 Agent-Setup: 환경설정 & 통합 담당 [완료]
+├── 특특이 Agent-Viewer: 3D Viewer 개선 담당 [완료]
+├── 중중이 Agent-QA: 테스트 & QA 담당
+├── 달달이 Agent-Metrics: 메트릭 & 그래프 담당 [완료]
+├── 헙헙이 Agent-GitHub: GitHub 관리 & PR 관리 담당
+├── 글글이 Agent-Docs: README.md & 문서 작성 담당
+└── 분석이 Agent-Review: 전체 코드 & PR 리뷰 담당
 ```
 
 ---
@@ -195,8 +187,24 @@ ruff check .
 ### Agent-Viewer 전용:
 - `src/faceanalyze2/viz/motion_viewer.py` (단독 소유)
 
-### Agent-QA 전용:
+### Agent-Metrics (달달이) 전용:
+- `src/faceanalyze2/api/dynamic_analysis.py` (ROI/메트릭/그래프)
+- `src/faceanalyze2/analysis/metrics.py` (메트릭 키 관련)
+- `src/faceanalyze2/desktop/results_panel.py` (메트릭 표시)
+
+### Agent-QA (중중이) 전용:
 - `tests/` (전체 디렉토리)
+
+### Agent-GitHub (헙헙이) 전용:
+- GitHub PR/이슈 관리 (gh CLI)
+- 프론트엔드 팀 전달 문서
+
+### Agent-Docs (글글이) 전용:
+- `README.md`
+- `docs/` (에이전트 MD 제외)
+
+### Agent-Review (분석이) 전용:
+- 코드 리뷰 (읽기 전용, 수정 시 총괄 보고)
 
 ### 공유 파일 (수정 전 조율 필수):
 - `CLAUDE.md` -- 이 파일 (진행 상황은 append-only)
@@ -289,10 +297,14 @@ compact 대비 각 에이전트의 대화 기록 보관:
 
 ```
 docs/conversation_logs/
-├── director_log.md      ← 총괄 대화 기록
-├── agent_setup_log.md   ← Agent-Setup 대화 기록
-├── agent_viewer_log.md  ← Agent-Viewer 대화 기록
-└── agent_qa_log.md      ← Agent-QA 대화 기록
+├── director_log.md       ← 무무치 (총괄) 대화 기록
+├── agent_setup_log.md    ← 무돌이 (Setup) 대화 기록
+├── agent_viewer_log.md   ← 특특이 (Viewer) 대화 기록
+├── agent_qa_log.md       ← 중중이 (QA) 대화 기록
+├── agent_metrics_log.md  ← 달달이 (Metrics) 대화 기록
+├── agent_github_log.md   ← 헙헙이 (GitHub) 대화 기록
+├── agent_docs_log.md     ← 글글이 (Docs) 대화 기록
+└── agent_review_log.md   ← 분석이 (Review) 대화 기록
 ```
 
 형식: 날짜, 작업 내용, 결정 사항, 결과를 마크다운으로 기록
