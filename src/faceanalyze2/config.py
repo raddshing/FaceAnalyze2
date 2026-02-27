@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from faceanalyze2.runtime_paths import get_artifact_root
+
 
 class TaskType(str, Enum):
     smile = "smile"
@@ -47,15 +49,19 @@ class RunConfig(BaseModel):
 
 def artifact_dir_for_video(
     video_path: str | Path,
-    artifact_root: str | Path = Path("artifacts"),
+    artifact_root: str | Path | None = None,
 ) -> Path:
+    if artifact_root is None:
+        artifact_root = get_artifact_root()
     return Path(artifact_root) / Path(video_path).stem
 
 
 def artifact_paths_for_video(
     video_path: str | Path,
-    artifact_root: str | Path = Path("artifacts"),
+    artifact_root: str | Path | None = None,
 ) -> dict[str, Path]:
+    if artifact_root is None:
+        artifact_root = get_artifact_root()
     artifact_dir = artifact_dir_for_video(video_path=video_path, artifact_root=artifact_root)
     return {
         "artifact_dir": artifact_dir,

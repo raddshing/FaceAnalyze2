@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+import faceanalyze2.config
 from faceanalyze2.api import dynamicAnalysis
 from faceanalyze2.roi.indices import (
     AREA0_GREEN,
@@ -98,7 +99,9 @@ def test_dynamic_analysis_big_smile_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _make_synthetic_artifacts(tmp_path, stem="sample", with_aligned=True)
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        faceanalyze2.config, "get_artifact_root", lambda: tmp_path / "artifacts"
+    )
 
     payload = dynamicAnalysis(tmp_path / "sample.mp4", "big-smile")
 
@@ -125,7 +128,9 @@ def test_dynamic_analysis_falls_back_to_landmarks_npz(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _make_synthetic_artifacts(tmp_path, stem="sample", with_aligned=False)
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        faceanalyze2.config, "get_artifact_root", lambda: tmp_path / "artifacts"
+    )
 
     payload = dynamicAnalysis(tmp_path / "sample.mp4", "blinking-motion")
     assert payload["metrics"]["motion"] == "blinking-motion"
@@ -137,7 +142,9 @@ def test_dynamic_analysis_rejects_unsupported_motion(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _make_synthetic_artifacts(tmp_path, stem="sample", with_aligned=True)
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        faceanalyze2.config, "get_artifact_root", lambda: tmp_path / "artifacts"
+    )
 
     with pytest.raises(ValueError) as exc_info:
         dynamicAnalysis(tmp_path / "sample.mp4", "unknown-motion")
