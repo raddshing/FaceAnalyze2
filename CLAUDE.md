@@ -245,6 +245,16 @@ main (origin/main 동기화)  ← 깨끗한 베이스
   - runtime_paths, config, desktop import 모두 정상
   - metrics CLI 보존 확인
 
+- [2026-02-27] [Agent-Viewer] [완료] Round 2 Fix 1: 검은화면 해결 - renderer 0x0 리사이즈 (4fb2dba)
+- [2026-02-27] [Agent-Viewer] [완료] Round 2 Fix 2: cone 2.5, point 2.8 기본값 조정 (1f8581a)
+- [2026-02-27] [Agent-Viewer] [완료] Round 2 Fix 3: 카메라 Z축 정면 시작 (b12877b)
+- [2026-02-27] [Agent-Viewer] [완료] Round 2 Fix 6: 벡터 표면 추종 - 접선면 투영 (6bd848c)
+- [2026-02-27] [Agent-Metrics] [완료] Fix 4: 모든 ROI 메트릭 표시 + AI→Asymmetry Index (7067949)
+- [2026-02-27] [Agent-Metrics] [완료] Fix 5: 전체 ROI L/R Displacement 그래프 (5efac58)
+- [2026-02-27] [총괄] [완료] Phase 3 - v3 피드백 브랜치 머지 + QA
+  - ruff check: All passed
+  - pytest: 33 passed, 1 known failure
+
 ### 차단됨
 - (없음)
 
