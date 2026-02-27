@@ -932,7 +932,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
       const [showTextureOverlay,setShowTextureOverlay]=React.useState(true);
       const [showBackground2d,setShowBackground2d]=React.useState(true);
       const [coneScale,setConeScale]=React.useState(1.0);
-      const [pointSize,setPointSize]=React.useState(2.8);
+      const [pointSize,setPointSize]=React.useState(4.5);
       const [regionEnabled,setRegionEnabled]=React.useState(initialRegions);
       const [images2dReady,setImages2dReady]=React.useState(false);
       const settingsRef=React.useRef({t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,regionEnabled});
@@ -1021,7 +1021,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
         };
         let mag2d=compute2dMagnitudes(frameW,frameH);
         const pointsGeom=new THREE.BufferGeometry();
-        const pointsMat=new THREE.PointsMaterial({size:2.8,vertexColors:true,transparent:true,opacity:.96,depthWrite:false});
+        const pointsMat=new THREE.PointsMaterial({size:4.5,vertexColors:true,transparent:true,opacity:.96,depthWrite:false});
         const pointsMesh=new THREE.Points(pointsGeom,pointsMat);
         setOverlayLayer(pointsMesh,20);
         scene.add(pointsMesh);
