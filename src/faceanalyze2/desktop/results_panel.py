@@ -39,7 +39,7 @@ IMAGE_KEYS = [
     ("after regi", "After Registration"),
 ]
 
-METRIC_COLUMNS = ["ROI", "L_peak", "R_peak", "AI", "Score"]
+METRIC_COLUMNS = ["ROI", "L_peak", "R_peak", "Asymmetry Index", "Score"]
 
 
 class ResultsPanel(QWidget):
@@ -146,7 +146,7 @@ class ResultsPanel(QWidget):
             self._metrics_table.setItem(row, 0, QTableWidgetItem(roi_name))
             self._metrics_table.setItem(row, 1, QTableWidgetItem(f"{values.get('L_peak', 0):.4f}"))
             self._metrics_table.setItem(row, 2, QTableWidgetItem(f"{values.get('R_peak', 0):.4f}"))
-            self._metrics_table.setItem(row, 3, QTableWidgetItem(f"{values.get('AI', 0):.4f}"))
+            self._metrics_table.setItem(row, 3, QTableWidgetItem(f"{values.get('Asymmetry Index', 0):.4f}"))
             self._metrics_table.setItem(row, 4, QTableWidgetItem(f"{values.get('score', 0):.1f}"))
         self._metrics_table.resizeColumnsToContents()
 
@@ -222,7 +222,7 @@ class ResultsPanel(QWidget):
                     roi_name,
                     f"{values.get('L_peak', 0):.6f}",
                     f"{values.get('R_peak', 0):.6f}",
-                    f"{values.get('AI', 0):.6f}",
+                    f"{values.get('Asymmetry Index', 0):.6f}",
                     f"{values.get('score', 0):.2f}",
                 ])
             Path(path).write_text(buf.getvalue(), encoding="utf-8")
@@ -290,7 +290,7 @@ class ResultsPanel(QWidget):
                     f"<tr><td>{roi_name}</td>"
                     f"<td>{values.get('L_peak', 0):.4f}</td>"
                     f"<td>{values.get('R_peak', 0):.4f}</td>"
-                    f"<td>{values.get('AI', 0):.4f}</td>"
+                    f"<td>{values.get('Asymmetry Index', 0):.4f}</td>"
                     f"<td>{values.get('score', 0):.1f}</td></tr>"
                 )
             parts.append("</table>")

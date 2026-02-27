@@ -28,10 +28,11 @@ PRIMARY_ROI_BY_MOTION = {
     "blinking-motion": "eye",
     "eyebrow-motion": "eyebrow",
 }
+ALL_ROIS = ["mouth", "eye", "eyebrow", "area0_green", "area1_blue", "area2_yellow", "area3_red"]
 ROI_ORDER_BY_MOTION = {
-    "big-smile": ["mouth", "area0_green", "area1_blue", "area2_yellow", "area3_red"],
-    "blinking-motion": ["eye"],
-    "eyebrow-motion": ["eyebrow"],
+    "big-smile": ALL_ROIS,
+    "blinking-motion": ALL_ROIS,
+    "eyebrow-motion": ALL_ROIS,
 }
 EPSILON = 1e-6
 LANDMARK_COUNT = 478
@@ -303,7 +304,7 @@ def _compute_roi_metrics_from_series(
         metrics[roi_name] = {
             "L_peak": left_peak,
             "R_peak": right_peak,
-            "AI": float(ai),
+            "Asymmetry Index": float(ai),
             "score": float(score),
         }
     return metrics

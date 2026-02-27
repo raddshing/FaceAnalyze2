@@ -315,7 +315,7 @@ def compute_roi_displacements(
         metrics[roi_name] = {
             "L_peak": left_peak,
             "R_peak": right_peak,
-            "AI": float(ai),
+            "Asymmetry Index": float(ai),
             "score": float(score),
         }
 
@@ -417,7 +417,7 @@ def _save_metrics_csv(
         "roi",
         "L_peak",
         "R_peak",
-        "AI",
+        "Asymmetry Index",
         "score",
         "neutral_frame_idx",
         "peak_frame_idx",
@@ -441,7 +441,7 @@ def _save_metrics_csv(
                     "roi": roi_name,
                     "L_peak": metric["L_peak"],
                     "R_peak": metric["R_peak"],
-                    "AI": metric["AI"],
+                    "Asymmetry Index": metric["Asymmetry Index"],
                     "score": metric["score"],
                     "neutral_frame_idx": neutral_frame_idx,
                     "peak_frame_idx": peak_frame_idx,
