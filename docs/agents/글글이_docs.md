@@ -41,4 +41,45 @@
 
 ## 업무일지
 
-(작업 시작 후 여기에 기록)
+### [2026-02-27] Session 1: v3 문서 업데이트
+
+**작업 내용:**
+
+1. **README.md Section 1 (프로젝트 개요)**
+   - "비대칭(AI)" → "비대칭(Asymmetry Index)" 풀네임으로 변경
+
+2. **README.md Section 2 (기능 요약)**
+   - Motion Viewer 설명에 "(자동 재생, 표면 추종 벡터)" v3 개선사항 추가
+
+3. **README.md Section 6 (Frontend Integration)**
+   - `metrics.roi_metrics.<roi>.AI` → `metrics.roi_metrics.<roi>."Asymmetry Index"` 변경
+   - 수식 설명: "AI = ..." → "Asymmetry Index = ..." 풀네임 변경
+   - "big-smile은 mouth + area0~3 ROI 포함" → "모든 motion에서 7개 ROI 전부 반환" 수정
+   - 7개 ROI 목록 명시: mouth, eye, eyebrow, area0_green, area1_blue, area2_yellow, area3_red
+
+4. **README.md Section 10 (Changelog) 신규 추가**
+   - v3: 3D Viewer 개선, 메트릭 전체 ROI, AI→Asymmetry Index, L/R 그래프
+   - v2: Desktop UI, PyInstaller, runtime_paths, Gradio 제거
+
+5. **docs/FRONTEND_INTEGRATION.md 동기화 수정**
+   - JSON 예시의 `"AI"` → `"Asymmetry Index"` 변경
+   - JSON 예시에 7개 ROI 전부 표시 (기존 mouth만 → 7개 모두)
+   - 계산 규칙의 AI → Asymmetry Index 변경
+   - "big-smile에서는 mouth + area0~3" → "모든 motion에서 7개 ROI 전부" 수정
+   - JS 렌더링 예제의 `AI: v.AI` → `asymmetryIndex: v["Asymmetry Index"]` 변경
+   - Security 섹션의 Gradio 참조 → Desktop UI 참조로 변경
+
+**코드-문서 일치 검증:**
+- `dynamic_analysis.py` line 307: `"Asymmetry Index": float(ai)` ← 코드와 일치 확인
+- `dynamic_analysis.py` line 31-36: ALL_ROIS 7개, 모든 motion 동일 ← 코드와 일치 확인
+- `metrics.py` line 318, 444: `"Asymmetry Index"` ← 코드와 일치 확인
+- `results_panel.py` line 42: `METRIC_COLUMNS`에 `"Asymmetry Index"` ← 코드와 일치 확인
+- 코드 전체에서 `"AI"` 키 사용 0건 ← 완전히 마이그레이션됨 확인
+
+**커밋:** `6487327` docs: update README and FRONTEND_INTEGRATION for v3 changes
+**push:** origin/feat/v3-docs-update에 push 완료
+
+**특이사항:**
+- VSCode 브랜치 자동 전환 문제 3회 발생 (dev-v2 → feat/v3-github-management → feat/v3-code-review)
+- CLAUDE.md Lessons Learned에 이미 기록된 패턴. git stash -u로 보호 후 checkout으로 해결
+- 편집 후 즉시 커밋하는 전략으로 데이터 유실 방지
