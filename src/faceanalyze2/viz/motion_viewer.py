@@ -967,7 +967,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
         const perspectiveCamera=new THREE.PerspectiveCamera(42,container.clientWidth/Math.max(container.clientHeight,1),0.1,10000);
         const orthoCamera=new THREE.OrthographicCamera(-320,320,240,-240,-5000,5000);
         const radius=Math.max(data.radius_hint||400,200);
-        perspectiveCamera.position.set(radius*.8,radius*.45,radius*1.1);
+        perspectiveCamera.position.set(0,0,radius*1.5);
         const controlsPerspective=new SimpleOrbitControls(perspectiveCamera,renderer.domElement);
         controlsPerspective.target.set(0,0,0);
         controlsPerspective.update();
