@@ -41,4 +41,32 @@
 
 ## 업무일지
 
-(작업 시작 후 여기에 기록)
+### [2026-02-27] 첫 번째 작업: PR #18 업데이트 + 프론트엔드 전달 문서
+
+#### 수행 내용
+
+1. **PR #18 body 업데이트** (gh pr edit)
+   - v2 통합 요약 (Desktop UI, PyInstaller, runtime_paths)
+   - v3 피드백 수정 6건 상세 (3D Viewer 4건 + 메트릭 2건)
+   - Breaking Changes 섹션 추가: "AI"→"Asymmetry Index", 7개 ROI 전체 반환
+   - 테스트 결과: ruff clean, 33 passed, 1 known failure
+   - URL: https://github.com/raddshing/FaceAnalyze2/pull/18
+
+2. **프론트엔드 팀 전달 문서 작성** (`docs/FRONTEND_CHANGES_V3.md`)
+   - Breaking Changes 3건 상세 (이전/이후 JSON 예시 포함)
+   - 프론트엔드 수정 포인트 코드 예시
+   - 전체 `dynamicAnalysis()` 응답 구조 문서화
+   - 체크리스트 포함
+
+3. **커밋 + push** (0886b9f)
+   - `docs: add frontend changes document for v3 breaking changes`
+   - 브랜치: feat/v3-github-management → origin
+
+#### 이슈 대응: VSCode 자동 브랜치 전환
+- 작업 중 VSCode가 feat/v3-docs-update로 자동 전환됨 (글글이 작업 브랜치)
+- `git stash -u` → checkout → `git stash pop` → 글글이 파일 `git checkout --` 으로 복원
+- 내 파일만 정확히 커밋 완료. CLAUDE.md 교훈이 실제로 도움됨
+
+#### 총괄 보고 사항
+- **PR 머지**: PR #18은 OPEN 상태. 머지 판단은 총괄 승인 필요 (규칙 #3)
+- **외부 전달**: `docs/FRONTEND_CHANGES_V3.md` 문서는 작성 완료. 프론트엔드 팀에 실제 전달은 총괄 검토 후 진행 필요 (규칙 #4)
