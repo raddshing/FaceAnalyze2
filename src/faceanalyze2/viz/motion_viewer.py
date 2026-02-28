@@ -516,6 +516,50 @@ def _extract_facemesh_faces(edges: list[list[int]]) -> list[list[int]]:
     return faces
 
 
+def _compute_surface_normals(
+    points_xyz: np.ndarray, faces: list[list[int]]
+) -> np.ndarray:
+    """Compute per-vertex normals by averaging adjacent triangle face normals."""
+    n_points = points_xyz.shape[0]
+    normals = np.zeros((n_points, 3), dtype=np.float64)
+
+    for face in faces:
+        a, b, c = int(face[0]), int(face[1]), int(face[2])
+        if a >= n_points or b >= n_points or c >= n_points:
+            continue
+        pa, pb, pc = points_xyz[a], points_xyz[b], points_xyz[c]
+        if not (np.isfinite(pa).all() and np.isfinite(pb).all() and np.isfinite(pc).all()):
+            continue
+        e1 = pb - pa
+        e2 = pc - pa
+        fn = np.cross(e1, e2)
+        fn_len = float(np.linalg.norm(fn))
+        if fn_len < EPSILON:
+            continue
+        fn /= fn_len
+        normals[a] += fn
+        normals[b] += fn
+        normals[c] += fn
+
+    lengths = np.linalg.norm(normals, axis=1, keepdims=True)
+    lengths = np.maximum(lengths, EPSILON)
+    normals /= lengths
+    return normals.astype(np.float32)
+
+
+def _project_to_tangent_plane(
+    unit_dirs: np.ndarray, normals: np.ndarray
+) -> np.ndarray:
+    """Project unit direction vectors onto the tangent plane and re-normalize."""
+    dots = np.sum(unit_dirs.astype(np.float64) * normals.astype(np.float64), axis=1, keepdims=True)
+    tangent = unit_dirs.astype(np.float64) - dots * normals.astype(np.float64)
+    lengths = np.linalg.norm(tangent, axis=1, keepdims=True)
+    valid = lengths.ravel() > EPSILON
+    result = np.zeros_like(unit_dirs, dtype=np.float32)
+    result[valid] = (tangent[valid] / lengths[valid]).astype(np.float32)
+    return result
+
+
 def _build_uv_coords_from_normalized_xy(normalized_xy: np.ndarray) -> list[list[float]]:
     xy = np.asarray(normalized_xy, dtype=np.float32)
     if xy.shape != (LANDMARK_COUNT, 2):
@@ -805,6 +849,23 @@ def _build_viewer_payload(
         np.float32
     )
 
+    # Surface tangent projection: project displacement onto face tangent plane
+    try:
+        payload_edges = _extract_facemesh_edges()
+        payload_faces = _extract_facemesh_faces(payload_edges)
+        surface_normals = _compute_surface_normals(base_xyz, payload_faces)
+        unit_dir_tangent = _project_to_tangent_plane(unit_dir, surface_normals)
+    except Exception:
+        payload_edges = _extract_facemesh_edges() if not locals().get("payload_edges") else []
+        unit_dir_tangent = unit_dir.copy()
+        unit_dir_tangent[:, 2] = 0.0
+        td_norms = np.linalg.norm(unit_dir_tangent, axis=1, keepdims=True)
+        td_valid = td_norms.ravel() > EPSILON
+        unit_dir_tangent[~td_valid] = 0.0
+        unit_dir_tangent[td_valid] = (
+            unit_dir_tangent[td_valid] / td_norms[td_valid]
+        ).astype(np.float32)
+
     cone_length = float(
         np.clip(
             DEFAULT_CONE_INTEROCULAR_SCALE * float(interocular),
@@ -844,6 +905,7 @@ def _build_viewer_payload(
         "peak_xyz": np.nan_to_num(peak_xyz_three, nan=0.0).astype(np.float32).tolist(),
         "disp_xyz": np.nan_to_num(disp_xyz_three, nan=0.0).astype(np.float32).tolist(),
         "unit_dir_xyz": np.nan_to_num(unit_dir, nan=0.0).astype(np.float32).tolist(),
+        "unit_dir_tangent": np.nan_to_num(unit_dir_tangent, nan=0.0).astype(np.float32).tolist(),
         "magnitude": np.nan_to_num(magnitude, nan=0.0).astype(np.float32).tolist(),
         "mag_global_norm": normalization["mag_global_norm"].astype(np.float32).tolist(),
         "mag_region_norm": normalization["mag_region_norm"].astype(np.float32).tolist(),
@@ -852,7 +914,7 @@ def _build_viewer_payload(
         "region_centroids": np.nan_to_num(region_centroids, nan=0.0).astype(np.float32).tolist(),
         "region_scales": normalization["region_scales"].astype(np.float32).tolist(),
         "global_scale": float(normalization["global_scale"]),
-        "edges": _extract_facemesh_edges(),
+        "edges": payload_edges,
         "cone_length_px": float(cone_length),
         "radius_hint": radius_hint,
         "quality": quality,
@@ -931,14 +993,18 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
       const [renderMode,setRenderMode]=React.useState(has2d?"2d":"points");
       const [showTextureOverlay,setShowTextureOverlay]=React.useState(true);
       const [showBackground2d,setShowBackground2d]=React.useState(true);
-      const [coneScale,setConeScale]=React.useState(1.0);
+      const [coneScale,setConeScale]=React.useState(2.5);
       const [pointSize,setPointSize]=React.useState(2.8);
+      const [flattenVectors,setFlattenVectors]=React.useState(true);
       const [regionEnabled,setRegionEnabled]=React.useState(initialRegions);
+      const [isPlaying,setIsPlaying]=React.useState(false);
+      const [playSpeed,setPlaySpeed]=React.useState(1.0);
       const [images2dReady,setImages2dReady]=React.useState(false);
-      const settingsRef=React.useRef({t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,regionEnabled});
+      const settingsRef=React.useRef({t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,flattenVectors,regionEnabled});
       React.useEffect(()=>{if(!has2d&&renderMode==="2d"){setRenderMode("points")}},[has2d,renderMode]);
       React.useEffect(()=>{if(!hasTexture&&renderMode==="texture"){setRenderMode(has2d?"2d":"points")}},[hasTexture,has2d,renderMode]);
-      React.useEffect(()=>{settingsRef.current={t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,regionEnabled};if(viewerRef.current?.updateScene)viewerRef.current.updateScene()},[t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,regionEnabled]);
+      React.useEffect(()=>{settingsRef.current={t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,flattenVectors,regionEnabled};if(viewerRef.current?.updateScene)viewerRef.current.updateScene()},[t,showWire,showCones,normalizeMode,renderMode,showTextureOverlay,showBackground2d,coneScale,pointSize,flattenVectors,regionEnabled]);
+      React.useEffect(()=>{if(!isPlaying)return;const interval=setInterval(()=>{setT(prev=>{const next=prev+0.01*playSpeed;return next>1?0:next;});},30);return()=>clearInterval(interval);},[isPlaying,playSpeed]);
       React.useEffect(()=>{
         if(!has2d){images2dRef.current=[];setImages2dReady(false);return;}
         let cancelled=false;
@@ -963,7 +1029,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
         const perspectiveCamera=new THREE.PerspectiveCamera(42,container.clientWidth/Math.max(container.clientHeight,1),0.1,10000);
         const orthoCamera=new THREE.OrthographicCamera(-320,320,240,-240,-5000,5000);
         const radius=Math.max(data.radius_hint||400,200);
-        perspectiveCamera.position.set(radius*.8,radius*.45,radius*1.1);
+        perspectiveCamera.position.set(0,0,radius*1.5);
         const controlsPerspective=new SimpleOrbitControls(perspectiveCamera,renderer.domElement);
         controlsPerspective.target.set(0,0,0);
         controlsPerspective.update();
@@ -994,7 +1060,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
           });
         };
 
-        const base=data.base_xyz,disp=data.disp_xyz,dirs=data.unit_dir_xyz,magRegion=data.mag_region_norm,magGlobal=data.mag_global_norm,regionIds=data.region_ids,regionNames=data.region_names,edges=data.edges,pointCount=base.length;
+        const base=data.base_xyz,disp=data.disp_xyz,dirs=data.unit_dir_xyz,tangentDirs=data.unit_dir_tangent||null,magRegion=data.mag_region_norm,magGlobal=data.mag_global_norm,regionIds=data.region_ids,regionNames=data.region_names,edges=data.edges,pointCount=base.length;
         const baseNorm=data.base_norm_xy||[];
         const peakNorm=data.peak_norm_xy||[];
         let frameW=1024;
@@ -1146,6 +1212,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
                 const dy=(b[1]-pk[1])*frameH;
                 u=[dx,dy,0.0];
               }
+              if(s.flattenVectors){if(tangentDirs&&tangentDirs[i]){u=tangentDirs[i];}else{u=[u[0],u[1],0.0];}}
               if(!Number.isFinite(u[0])||!Number.isFinite(u[1])||!Number.isFinite(u[2]))continue;
               const magU=Math.sqrt(u[0]*u[0]+u[1]*u[1]+u[2]*u[2]);
               if(magU<1e-6)continue;
@@ -1178,6 +1245,7 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
               bgPlane.scale.set(frameW,frameH,1);
             }
           }
+          if(s.renderMode!=="2d"){const cw=container.clientWidth,ch=container.clientHeight;if(cw>0&&ch>0){const sz=new THREE.Vector2();renderer.getSize(sz);if(Math.abs(sz.x-cw)>1||Math.abs(sz.y-ch)>1){renderer.setSize(cw,ch);perspectiveCamera.aspect=cw/Math.max(ch,1);}}perspectiveCamera.updateProjectionMatrix();controlsPerspective.update();renderer.render(scene,perspectiveCamera);}
         };
 
         const hideTip=()=>{if(tipRef.current)tipRef.current.style.display="none"};
@@ -1440,9 +1508,11 @@ def _render_motion_viewer_html(viewer_payload: dict[str, Any]) -> str:
             </div>
             {!has2d && <div className="row muted">2d unavailable (video/frame read failed)</div>}
             {!hasTexture && <div className="row muted">texture unavailable (neutral frame unavailable)</div>}
-            <div className="row"><label>t = {t.toFixed(2)}</label><input type="range" min="0" max="1" step="0.01" value={t} onChange={e=>setT(parseFloat(e.target.value))}/></div>
+            <div className="row"><label>t = {t.toFixed(2)}</label><input type="range" min="0" max="1" step="0.01" value={t} onChange={e=>{setIsPlaying(false);setT(parseFloat(e.target.value))}}/></div>
+            <div className="row" style={{display:"flex",gap:"6px"}}><button style={{flex:1}} onClick={()=>setIsPlaying(p=>!p)}>{isPlaying?"\u23f8 Pause":"\u25b6 Play"}</button><button style={{flex:0,padding:"7px 10px",opacity:playSpeed===0.5?1:0.5}} onClick={()=>setPlaySpeed(0.5)}>0.5x</button><button style={{flex:0,padding:"7px 10px",opacity:playSpeed===1.0?1:0.5}} onClick={()=>setPlaySpeed(1.0)}>1x</button><button style={{flex:0,padding:"7px 10px",opacity:playSpeed===2.0?1:0.5}} onClick={()=>setPlaySpeed(2.0)}>2x</button></div>
             <div className="row"><label><input type="checkbox" checked={showWire} onChange={e=>setShowWire(e.target.checked)}/>wireframe</label></div>
             <div className="row"><label><input type="checkbox" checked={showCones} onChange={e=>setShowCones(e.target.checked)}/>cones</label></div>
+            <div className="row"><label><input type="checkbox" checked={flattenVectors} onChange={e=>setFlattenVectors(e.target.checked)}/>Surface tangent vectors</label></div>
             {has2d&&renderMode==="2d"&&(<div className="row"><label><input type="checkbox" checked={showBackground2d} onChange={e=>setShowBackground2d(e.target.checked)}/>video overlay</label></div>)}
             {renderMode!=="points"&&(<div className="row"><label><input type="checkbox" checked={showTextureOverlay} onChange={e=>setShowTextureOverlay(e.target.checked)}/>displacement heatmap</label></div>)}
             <div className="row"><label>normalize mode</label><select value={normalizeMode} onChange={e=>setNormalizeMode(e.target.value)}><option value="region">region normalize</option><option value="global">global normalize</option></select></div>

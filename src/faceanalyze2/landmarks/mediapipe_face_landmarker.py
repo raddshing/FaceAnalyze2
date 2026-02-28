@@ -9,13 +9,14 @@ from typing import Any
 import numpy as np
 
 from faceanalyze2.io.video_reader import VideoInfo, iter_frames, probe_video
+from faceanalyze2.runtime_paths import get_artifact_root, get_model_path
 
 OFFICIAL_FACE_LANDMARKER_MODEL_URL = (
     "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
     "face_landmarker/float16/1/face_landmarker.task"
 )
-DEFAULT_MODEL_PATH = Path("models/face_landmarker.task")
-DEFAULT_ARTIFACT_ROOT = Path("artifacts")
+DEFAULT_MODEL_PATH = get_model_path()
+DEFAULT_ARTIFACT_ROOT = get_artifact_root()
 LANDMARK_COUNT = 478
 BLENDSHAPE_COUNT = 52
 
@@ -172,7 +173,7 @@ def save_landmark_artifacts(
 
 def extract_face_landmarks_from_video(
     video_path: str,
-    model_path: str = "models/face_landmarker.task",
+    model_path: str | Path | None = None,
     stride: int = 1,
     start_frame: int = 0,
     end_frame: int | None = None,
@@ -191,6 +192,8 @@ def extract_face_landmarks_from_video(
     if num_faces < 1:
         raise ValueError(f"num_faces must be >= 1, got: {num_faces}")
 
+    if model_path is None:
+        model_path = DEFAULT_MODEL_PATH
     model_file = _require_model_file(model_path)
     video_info = probe_video(video_path)
 

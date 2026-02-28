@@ -10,7 +10,7 @@ FaceAnalyze2는 안면 움직임 영상을 정량 분석하여 neutral 대비 pe
 | 단계별 CLI | `landmarks/segment/align/metrics/viewer` | 단계별 디버깅/재실행 | 단계별 json/csv/png/html |
 | Frontend API | `dynamicAnalysis(vd_path, motion)` | 프론트 표시용 이미지/metrics 계약 반환 | base64 PNG 5개 + metrics dict |
 | Motion Viewer | `faceanalyze2 viewer generate ...` | 3D motion viewer HTML 생성 | `motion_viewer.html` |
-| Gradio Demo | `python -m faceanalyze2.demo.gradio_app` | 데모 시연용 로컬 UI | 로컬 브라우저 데모 |
+| Desktop UI | `python -m faceanalyze2.desktop.app` | PySide6 데스크톱 GUI | 독립 실행 프로그램 (exe) |
 
 ## 3) 설치/환경
 - Python `3.11` 권장
@@ -22,15 +22,15 @@ conda activate facepalsy311
 python -m pip install -e ".[dev]"
 ```
 
-- Gradio demo 포함 설치:
+- Desktop UI + PyInstaller 포함 설치:
 
 ```powershell
-python -m pip install -e ".[dev,demo]"
+python -m pip install -e ".[dev,desktop]"
 ```
 
-- MediaPipe 모델 파일은 별도로 다운로드가 필요합니다.
+- MediaPipe 모델 파일은 저장소에 커밋하지 않습니다.
   - 위치: `models/face_landmarker.task`
-  - 다운로드 안내: [`models/README.md`](models/README.md)
+  - 안내: `models/README.md`
 
 ## 4) Quickstart
 ### ① CLI로 한 번에 분석
@@ -38,20 +38,12 @@ python -m pip install -e ".[dev,demo]"
 python -m faceanalyze2 run --video "D:\local\sample.mp4" --task smile --model "models/face_landmarker.task" --stride 2
 ```
 
-| 옵션 | 설명 | 기본값 |
-|---|---|---|
-| `--video` | 분석할 입력 영상 경로 (.mp4) | (필수) |
-| `--task` | 분석할 안면 움직임: `smile`, `brow`, `eyeclose` | (필수) |
-| `--model` | MediaPipe Face Landmarker 모델 파일 경로 | `models/face_landmarker.task` |
-| `--stride` | 프레임 샘플링 간격 (2 = 2프레임당 1프레임 처리) | `1` |
-
-
 ### ② viewer 생성
 ```powershell
 python -m faceanalyze2 viewer generate --video "D:\local\sample.mp4"
 ```
 
-### ③ Python API 호출 예제 (dynamicAnalysis 연동 예제)
+### ③ dynamicAnalysis 연동 예제
 ```python
 from faceanalyze2 import dynamicAnalysis
 
@@ -60,69 +52,47 @@ print(result.keys())
 print(result["metrics"].keys())
 ```
 
-### ④ Gradio demo 실행
+### ④ Desktop UI 실행
 ```powershell
-python -m faceanalyze2.demo.gradio_app
+python -m faceanalyze2.desktop.app
+```
+
+### ⑤ PyInstaller exe 빌드
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build.ps1
 ```
 
 ## 5) Artifacts 구조
 주요 산출물은 `artifacts/<video_stem>/` 아래에 생성됩니다.
 
-| 단계 | 산출물 | 설명 |
-|---|---|---|
-| landmarks | `landmarks.npz` | 478개 얼굴 랜드마크 좌표 (T×478×3) |
-| landmarks | `meta.json` | 영상 메타데이터 (fps, width, height 등) |
-| segment | `segment.json` | neutral/peak/onset/offset 프레임 인덱스 |
-| segment | `signals.csv` | 프레임별 task 신호 (raw + smoothed) |
-| segment | `signals_plot.png` | 신호 시각화 및 구간 표시 그래프 |
-| align | `landmarks_aligned.npz` | neutral 기준 정합된 랜드마크 좌표 (pixel) |
-| align | `alignment.json` | 정합 파라미터 및 품질 통계 |
-| metrics | `metrics.json` | ROI별 좌/우 변위, 비대칭 지수(AI), score |
-| metrics | `metrics.csv` | metrics 요약 (CSV 형식) |
-| metrics | `timeseries.csv` | 프레임별 ROI 좌/우 변위 시계열 |
-| metrics | `plots/*.png` | ROI별 좌/우 displacement 그래프 |
-| viewer | `motion_viewer.html` | 3D/2D 인터랙티브 모션 뷰어 |
+- `landmarks.npz`, `meta.json`
+- `segment.json`, `signals.csv`, `signals_plot.png`
+- `landmarks_aligned.npz`, `alignment.json`
+- `metrics.json`, `metrics.csv`, `timeseries.csv`, `plots/*.png`
+- `motion_viewer.html`
 
 ## 6) Frontend Integration
+핵심 계약은 `dynamicAnalysis(vd_path, motion)`입니다.
 
-프론트엔드에서 분석 결과를 받아 화면에 표시할 때 사용하는 API입니다.
+- `motion` 허용값: `big-smile | blinking-motion | eyebrow-motion`
+- 반환 dict의 고정 키(변경 금지):
+  - `'key rest'`
+  - `'key exp'`
+  - `'key value graph'`
+  - `'before regi'`
+  - `'after regi'`
+  - `'metrics'`
+- 이미지 값은 `data:image/...` prefix 없는 base64 PNG 문자열입니다.
+- `metrics.roi_metrics.<roi>.AI`와 `score`:
+  - `AI = abs(L_peak - R_peak) / max(eps, (L_peak + R_peak)/2)`
+  - `score = (1 - clamp(AI, 0, 1)) * 100`
+- `big-smile`은 mouth + area0~3 ROI를 포함하며, area0~3는 pair-table 간접 인덱스 기반입니다.
 
-### 호출 방법
-```python
-from faceanalyze2 import dynamicAnalysis
-result = dynamicAnalysis(vd_path, motion)
-```
-
-### `motion` 허용값
-| motion 값 | 내부 task 매핑 | 분석 대상 |
-|---|---|---|
-| `big-smile` | `smile` | 미소 (입 + area0~3 ROI) |
-| `blinking-motion` | `eyeclose` | 눈 감김 |
-| `eyebrow-motion` | `brow` | 눈썹 움직임 |
-
-### 반환 키 (변경 금지)
-| 키 | 타입 | 내용 |
-|---|---|---|
-| `'key rest'` | base64 PNG | neutral(무표정) 프레임 이미지 |
-| `'key exp'` | base64 PNG | peak(최대 움직임) 프레임 이미지 |
-| `'key value graph'` | base64 PNG | 좌/우 displacement 그래프 |
-| `'before regi'` | base64 PNG | 정합 전 랜드마크 오버레이 |
-| `'after regi'` | base64 PNG | 정합 후 랜드마크 오버레이 |
-| `'metrics'` | dict | ROI별 비대칭 지수 및 점수 |
-
-> 이미지 값에는 `data:image/...` prefix가 포함되어 있지 않습니다. 프론트에서 표시할 때 직접 붙여주세요.
-
-### 비대칭 지수 계산
-- **AI(Asymmetry Index)** = `abs(L_peak - R_peak) / max(ε, (L_peak + R_peak) / 2)`
-- **score** = `(1 - clamp(AI, 0, 1)) × 100`
-  - 0점 = 완전 비대칭, 100점 = 완전 대칭
-
-프론트 연동 상세 계약은 [`docs/FRONTEND_INTEGRATION.md`](docs/FRONTEND_INTEGRATION.md)를 참고하세요.
+프론트 상세 계약/예시는 `docs/FRONTEND_INTEGRATION.md`를 참고하세요.
 
 ## 7) 보안/주의
-- 환자 영상/프레임/landmark 결과는 환자 개인정보가 포함할 수 있습니다.
-- `motion_viewer.html`, Gradio demo 화면/파일은 외부 공유 금지입니다.
-- Gradio는 로컬 전용이며 `share=True`를 사용하지 않습니다.
+- 환자 영상/프레임/landmark 결과는 PHI를 포함할 수 있습니다.
+- `motion_viewer.html`, Desktop UI 화면/파일은 외부 공유 금지입니다.
 - `artifacts/`, `demo_inputs/`, `demo_outputs/`, `models/*.task`는 git 커밋 금지 정책입니다.
 
 ## 8) Troubleshooting
@@ -151,6 +121,4 @@ pytest -q
 - 관련 문서:
   - `docs/DEV_GUIDE.md`
   - `docs/FRONTEND_INTEGRATION.md`
-  - `docs/DEMO_GRADIO.md`
   - `models/README.md`
-
